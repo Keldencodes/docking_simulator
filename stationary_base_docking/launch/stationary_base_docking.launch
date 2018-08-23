@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<launch>
+
+    <!-- MAVROS posix SITL environment launch script -->
+    <!-- launches MAVROS, PX4 SITL, Gazebo environment, and spawns vehicle -->
+
+    <!-- gazebo configs -->
+    <arg name="gui" default="true"/>
+    <arg name="debug" default="false"/>
+    <arg name="verbose" default="false"/>
+    <arg name="paused" default="false"/>
+    <arg name="respawn_gazebo" default="false"/>
+    <arg name="world" default="$(find mavlink_sitl_gazebo)/worlds/empty.world"/>
+    <!-- Gazebo sim -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="gui" value="$(arg gui)"/>
+        <arg name="world_name" value="$(arg world)"/>
+        <arg name="debug" value="$(arg debug)"/>
+        <arg name="verbose" value="$(arg verbose)"/>
+        <arg name="paused" value="$(arg paused)"/>
+        <arg name="respawn_gazebo" value="$(arg respawn_gazebo)"/>
+    </include>
+
+    <group ns="donut">
+        <!-- PX4 configs and files -->
+        <arg name="est" default="lpe"/>
+        <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/iris"/>
+        <arg name="interactive" default="true"/>
+        <!-- PX4 SITL -->
+        <arg unless="$(arg interactive)" name="px4_command_arg1" value="-d"/>
+        <arg     if="$(arg interactive)" name="px4_command_arg1" value=""/>
+        <node name="sitl" pkg="px4" type="px4" output="screen" args="$(find px4) $(arg rcS) $(arg px4_command_arg1)" required="true"/>
+        <node name="donut_docking" pkg="stationary_base_docking" type="donut_docking" output="screen" />
+        <!-- MAVROS configs -->
+        <arg name="fcu_url" default="udp://:14540@localhost:14557"/>
+        <arg name="respawn_mavros" default="false"/>
+        <!-- MAVROS -->
+        <include file="$(find mavros)/launch/px4.launch">
+            <!-- GCS link is provided by SITL -->
+            <arg name="gcs_url" value=""/>
+            <arg name="fcu_url" value="$(arg fcu_url)"/>
+            <arg name="respawn_mavros" value="$(arg respawn_mavros)"/>
+        </include>
+
+        <arg name="model_name" default="donut"/>
+        <arg name="model" default="$(find stationary_base_docking)/urdf/$(arg model_name).xacro"/>
+        <arg name="tf_prefix" default="$(optenv ROS_NAMESPACE)"/>
+        <arg name="x" default="3.0"/>
+        <arg name="y" default="5.0"/>
+        <arg name="z" default="0.0"/>
+        <!-- send the robot XML to param server -->
+        <param name="robot_description" command="
+            $(find xacro)/xacro --inorder '$(arg model)'
+            model_name:=$(arg model_name)
+            namespace:=$(arg model_name)"
+        />
+        <param name="tf_prefix" type="string" value="$(arg tf_prefix)" />
+        <!-- gazebo model -->
+        <node name="spawn_$(arg model_name)" pkg="gazebo_ros" type="spawn_model"
+         args="-param robot_description
+             -urdf
+             -x $(arg x)
+             -y $(arg y)
+             -z $(arg z)
+             -model $(arg model_name)"
+         respawn="false" output="screen">
+        </node>
+    </group>
+
+    <group ns="camera_test">
+        <arg name="model_name" default="base" />
+        <arg name="model" default="$(find base_description)/urdf/$(arg model_name).xacro"/>
+        <param name="robot_description" 
+            command="$(find xacro)/xacro --inorder
+                    '$(arg model)'
+                    namespace:=$(arg model_name)" />
+        <node name="spawn_$(arg model_name)" pkg="gazebo_ros" type="spawn_model" respawn="false"    output="screen" args="-param robot_description -urdf -model $(arg model_name)" />
+    </group>
+
+</launch>

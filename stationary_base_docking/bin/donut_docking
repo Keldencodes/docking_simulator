@@ -1,0 +1,6 @@
+#! /usr/bin/env python
+
+import stationary_base_docking.donut_docking
+
+if __name__ == '__main__':
+	stationary_base_docking.donut_docking.main()
