@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>base_description</name>
+  <name>docking_description</name>
   <version>0.0.0</version>
-  <description>The base_description package</description>
+  <description>The docking_description package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->

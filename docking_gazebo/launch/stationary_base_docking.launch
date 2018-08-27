@@ -30,7 +30,7 @@
         <arg unless="$(arg interactive)" name="px4_command_arg1" value="-d"/>
         <arg     if="$(arg interactive)" name="px4_command_arg1" value=""/>
         <node name="sitl" pkg="px4" type="px4" output="screen" args="$(find px4) $(arg rcS) $(arg px4_command_arg1)" required="true"/>
-        <node name="donut_docking" pkg="stationary_base_docking" type="donut_docking" output="screen" />
+        <node name="donut_docking" pkg="docking_gazebo" type="donut_docking" output="screen" />
         <!-- MAVROS configs -->
         <arg name="fcu_url" default="udp://:14540@localhost:14557"/>
         <arg name="respawn_mavros" default="false"/>
@@ -43,7 +43,7 @@
         </include>
 
         <arg name="model_name" default="donut"/>
-        <arg name="model" default="$(find stationary_base_docking)/urdf/$(arg model_name).xacro"/>
+        <arg name="model" default="$(find docking_description)/urdf/$(arg model_name).xacro"/>
         <arg name="tf_prefix" default="$(optenv ROS_NAMESPACE)"/>
         <arg name="x" default="3.0"/>
         <arg name="y" default="5.0"/>
@@ -69,7 +69,7 @@
 
     <group ns="camera_test">
         <arg name="model_name" default="base" />
-        <arg name="model" default="$(find base_description)/urdf/$(arg model_name).xacro"/>
+        <arg name="model" default="$(find docking_description)/urdf/$(arg model_name).xacro"/>
         <param name="robot_description" 
             command="$(find xacro)/xacro --inorder
                     '$(arg model)'

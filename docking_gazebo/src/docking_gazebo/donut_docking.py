@@ -1,7 +1,7 @@
 #!usr/bin/env python
 
 import roslib
-roslib.load_manifest('stationary_base_docking')
+roslib.load_manifest('docking_gazebo')
 import rospy
 import mavros
 import cv2

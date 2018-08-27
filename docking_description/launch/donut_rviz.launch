@@ -4,7 +4,7 @@
    <arg name="namespace" default="donut" />
 
    <param name="robot_description" command="$(find xacro)/xacro --inorder 
-      '$(find stationary_base_docking)/urdf/$(arg model)'
+      '$(find docking_description)/urdf/$(arg model)'
       namespace:=$(arg namespace)" />
 
    <!-- send joint values from gui -->
@@ -17,6 +17,6 @@
 
    <!-- visualize robot model in 3D -->
    <node name="rviz" pkg="rviz" type="rviz" 
-         args="-d $(find stationary_base_docking)/rviz/urdf.rviz" required="true" />
+         args="-d $(find docking_description)/rviz/$(arg namespace).rviz" required="true" />
 
 </launch>

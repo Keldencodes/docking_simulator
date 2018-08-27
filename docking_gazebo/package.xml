@@ -1,5 +1,5 @@
 <package>
-  <name>stationary_base_docking</name>
+  <name>docking_gazebo</name>
   <version>2.1.1</version>
   <description>Package to simulate mav docking on a fixed base</description>
 
