@@ -24,7 +24,7 @@
     <group ns="donut">
         <!-- PX4 configs and files -->
         <arg name="est" default="lpe"/>
-        <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/iris"/>
+        <arg name="rcS" default="$(find docking_description)/params/donut"/>
         <arg name="interactive" default="true"/>
         <!-- PX4 SITL -->
         <arg unless="$(arg interactive)" name="px4_command_arg1" value="-d"/>

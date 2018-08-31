@@ -58,79 +58,79 @@ class donut_docking:
     red_hue_image = cv2.addWeighted(lower_red_hue_range, 1.0, upper_red_hue_range, 1.0, 0.0)
     red_hue_image = cv2.GaussianBlur(red_hue_image, (9, 9), 2, 2)
 
-    # detect circles
-    circs = cv2.HoughCircles(red_hue_image, cv2.HOUGH_GRADIENT, 1, 20, 
-                             param1=20, param2=10, minRadius=0, maxRadius=0)
+    # detect contours
+    _, contours, heirarchy = cv2.findContours(red_hue_image,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 
-    if circs is None:
+    if len(contours) < 2:
       self.cv_pose = np.array([np.nan, np.nan, np.nan])
     else:
-      # take the first circle vector
-      circ_r = np.uint16(np.around(circs[0,:][0]))
-      # draw detected circle and center point
-      cv2.circle(img,(circ_r[0],circ_r[1]),circ_r[2],(0,255,0),2)
-      cv2.circle(img,(circ_r[0],circ_r[1]),2,(255,0,0),3)
+      outer_cnt = contours[0]
+      inner_cnt = contours[1]
 
-      circ_x = circs[0,:][0][0]
-      circ_y = circs[0,:][0][1]
-      circ_d = 2*circs[0,:][0][2]
+      outer_area = cv2.contourArea(outer_cnt)
+      inner_area = cv2.contourArea(inner_cnt)
+      outer_dia = np.sqrt(4.0*outer_area/np.pi)
+      inner_dia = np.sqrt(4.0*inner_area/np.pi)
+
+      outer_M = cv2.moments(outer_cnt)
+      inner_M = cv2.moments(inner_cnt)
+      outer_cx = outer_M['m10']/outer_M['m00']
+      outer_cy = outer_M['m01']/outer_M['m00']
+      inner_cx = inner_M['m10']/inner_M['m00']
+      inner_cy = inner_M['m01']/inner_M['m00']
+
+      led_x = (outer_cx + inner_cx)/2
+      led_y = (outer_cy + inner_cy)/2
+      led_dia = (outer_dia + inner_dia)/2
+
       img_height, img_width, _ = img.shape
       img_center_x = img_width/2
       img_center_y = img_height/2
-      diff_x = img_center_x - circ_x
-      diff_y = img_center_y - circ_y
+      diff_x = img_center_x - led_x
+      diff_y = led_y - img_center_y
       fov = np.radians(80)
       foc_len = (img_width/2)/(np.tan(fov/2))
 
-      marker_d = 0.1
-      unit_dist = marker_d/circ_d
-      self.cv_pose[0] = foc_len*unit_dist
+      led_dia_irl = 0.2413
+      unit_dist = led_dia_irl/led_dia
+      self.cv_pose[0] = diff_y*unit_dist
       self.cv_pose[1] = diff_x*unit_dist
-      self.cv_pose[2] = diff_y*unit_dist
-
+      self.cv_pose[2] = foc_len*unit_dist
+      
       if pose_avg_store >= 0:
         pose_avg_store -= 1
         cv_avg_poses[pose_avg_store,:] = self.cv_pose
       elif pose_avg_store == -1:
         pose_avg_store = 5
-        if pose_iter > 0:
-          self.cv_pose_avg = np.mean(cv_avg_poses, axis=0)
-        elif pose_iter == 0:
-          cv_pose_avg = np.mean(cv_avg_poses, axis=0)
-          compare = np.abs(np.subtract(cv_pose_avg, self.cv_pose_avg))
-          if np.all(compare < 0.2):
-            self.cv_pose_avg = cv_pose_avg
+        self.cv_pose_avg = np.mean(cv_avg_poses, axis=0)
+
+      img = cv2.circle(img, (np.uint16(led_x),np.uint16(led_y)), np.uint16(led_dia)/2, (0,255,0), 2)
+      img = cv2.circle(img, (np.uint16(led_x),np.uint16(led_y)), 2, (255,0,0), 3)
 
       cv2.imshow("Image Stream", img)
       cv2.waitKey(3)
 
   def position_control(self):
-    global desired_pose, cv_poses, pose_store, pose_iter
+    global desired_pose, pose_store, pose_iter
 
     if np.isfinite(self.cv_pose).any():
-      if pose_store >= 0 and pose_iter > 0:
+      if pose_store >= 0:
         pose_store -= 1
-        cv_poses[pose_store,:] = self.cv_pose
-      elif pose_store == -1 and pose_iter > 0:
-        pose_store = 200
+      elif pose_store == -1 and pose_iter == 1:
+        pose_store = 500
         pose_iter -= 1
 
-        cv_pose_x = np.mean(self.reject_outliers(cv_poses[:,0]))
-        cv_pose_y = np.mean(self.reject_outliers(cv_poses[:,1]))
-        cv_pose_z = np.mean(self.reject_outliers(cv_poses[:,2]))
-
-        desired_pose[0] = desired_pose[0] + (1.5 - cv_pose_x)
-        desired_pose[1] = desired_pose[1] + (0.0 - cv_pose_y)
-        desired_pose[2] = desired_pose[2] + (0.0 - cv_pose_z)
-      # elif pose_iter == 0:
-      #   feed_pose = PoseStamped()
-      #   feed_pose.pose.position.x = self.cv_pose_avg[0] - 3.0
-      #   feed_pose.pose.position.y = self.cv_pose_avg[1] - 5.0
-      #   feed_pose.pose.position.z = self.cv_pose_avg[2] + 0.825
+        cv_shift = np.subtract(np.array([0.0, 0.0, 1.5]), self.cv_pose_avg)
+        desired_pose = np.add(desired_pose, cv_shift)
+      elif pose_store == -1 and pose_iter == 0:
+        feed_pose = PoseStamped()
+        feed_pose.pose.position.x = self.cv_pose_avg[0] - 3.0
+        feed_pose.pose.position.y = self.cv_pose_avg[1] - 5.0
+        feed_pose.pose.position.z = self.cv_pose_avg[2] + 0.683514
   
-      #   # publish pose 
-      #   feed_pose.header.stamp = rospy.Time.now()
-      #   self.cv_feed_pos_pub.publish(feed_pose)
+        # publish pose 
+        feed_pose.header.stamp = rospy.Time.now()
+        self.cv_feed_pos_pub.publish(feed_pose)
 
     pose = PoseStamped()
     pose.pose.position.x = desired_pose[0]
@@ -143,11 +143,10 @@ class donut_docking:
 
 offb_set_mode = SetMode
 current_state = State()
+desired_pose = np.array([-1.0, -4.0, 6.0])
 
-desired_pose = np.array([0.0, -5.0, 6.0])
-pose_store = 200
-pose_iter = 2
-cv_poses = np.empty((pose_store,3))
+pose_store = 500
+pose_iter = 1
 
 pose_avg_store = 5
 cv_avg_poses = np.empty((pose_avg_store,3))
