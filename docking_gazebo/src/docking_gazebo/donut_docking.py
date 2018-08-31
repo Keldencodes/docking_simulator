@@ -21,10 +21,10 @@ class donut_docking:
 
     self.cv_pose = np.array([np.nan, np.nan, np.nan])
     self.cv_pose_avg = np.array ([np.nan, np.nan, np.nan])
-    self.cv_feed_pos_pub = rospy.Publisher('/donut/mavros/mocap/pose', PoseStamped, queue_size=10)
+    self.cv_feed_pos_pub = rospy.Publisher('/donut/mavros/mocap/pose', PoseStamped, queue_size=100)
 
     self.state_sub = rospy.Subscriber('/donut/mavros/state', State, self.state_cb)
-    self.local_pos_pub = rospy.Publisher('/donut/mavros/setpoint_position/local', PoseStamped, queue_size=10)
+    self.local_pos_pub = rospy.Publisher('/donut/mavros/setpoint_position/local', PoseStamped, queue_size=100)
 
     self.arming_client = rospy.ServiceProxy('/donut/mavros/cmd/arming', CommandBool)
     self.set_mode_client = rospy.ServiceProxy('/donut/mavros/set_mode', SetMode) 
@@ -111,18 +111,20 @@ class donut_docking:
       cv2.waitKey(3)
 
   def position_control(self):
-    global desired_pose, pose_store, pose_iter
+    global desired_pose, pose_lag, pose_iter, pose_switch
 
     if np.isfinite(self.cv_pose).any():
-      if pose_store >= 0:
-        pose_store -= 1
-      elif pose_store == -1 and pose_iter == 1:
-        pose_store = 500
+      if pose_lag >= 0:
+        pose_lag -= 1
+      elif pose_lag == -1 and pose_iter == 1:
+        pose_lag = 500
         pose_iter -= 1
 
         cv_shift = np.subtract(np.array([0.0, 0.0, 1.5]), self.cv_pose_avg)
         desired_pose = np.add(desired_pose, cv_shift)
-      elif pose_store == -1 and pose_iter == 0:
+      elif pose_lag <= -1 and pose_iter == 0:
+      	pose_lag -= 1
+
         feed_pose = PoseStamped()
         feed_pose.pose.position.x = self.cv_pose_avg[0] - 3.0
         feed_pose.pose.position.y = self.cv_pose_avg[1] - 5.0
@@ -131,6 +133,12 @@ class donut_docking:
         # publish pose 
         feed_pose.header.stamp = rospy.Time.now()
         self.cv_feed_pos_pub.publish(feed_pose)
+
+        if pose_lag <= -200 and pose_switch == 1:
+        	pose_switch = 0
+
+        	cv_shift = np.subtract(np.array([0.0, 0.0, 1.5]), self.cv_pose_avg)
+        	desired_pose = np.add(desired_pose, cv_shift)
 
     pose = PoseStamped()
     pose.pose.position.x = desired_pose[0]
@@ -143,10 +151,11 @@ class donut_docking:
 
 offb_set_mode = SetMode
 current_state = State()
-desired_pose = np.array([-1.0, -4.0, 6.0])
 
-pose_store = 500
+desired_pose = np.array([-1.0, -4.0, 6.0])
+pose_lag = 500
 pose_iter = 1
+pose_switch = 1
 
 pose_avg_store = 5
 cv_avg_poses = np.empty((pose_avg_store,3))
