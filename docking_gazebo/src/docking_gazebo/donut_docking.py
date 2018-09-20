@@ -15,140 +15,167 @@ import numpy as np
 
 class donut_docking:
 
-  def __init__(self):
-    self.bridge = CvBridge()
-    self.image_sub = rospy.Subscriber('/camera_test/camera1/image_raw', Image, self.detect_circle)
+	def __init__(self):
+		# ROS/opencv interface 
+		self.bridge = CvBridge()
+		# image feed subscriber
+		self.image_sub = rospy.Subscriber('/base/camera1/image_raw', Image, self.detect_circle)
+	
+		# arrays to hold cv pose data
+		self.cv_pose = np.array([np.nan, np.nan, np.nan])
+		self.cv_pose_avg = np.array ([np.nan, np.nan, np.nan])
+		# cv pose publisher (motion capture)
+		self.cv_feed_pos_pub = rospy.Publisher('/donut/mavros/mocap/pose', PoseStamped, queue_size=100)
+		# mav position setpoint publisher 
+		self.local_pos_pub = rospy.Publisher('/donut/mavros/setpoint_position/local', PoseStamped, queue_size=100)
+	
+		# subscriber for the current state
+		self.state_sub = rospy.Subscriber('/donut/mavros/state', State, self.state_cb)
+		# services for arming and setting mode requests
+		self.arming_client = rospy.ServiceProxy('/donut/mavros/cmd/arming', CommandBool)
+		self.set_mode_client = rospy.ServiceProxy('/donut/mavros/set_mode', SetMode) 
 
-    self.cv_pose = np.array([np.nan, np.nan, np.nan])
-    self.cv_pose_avg = np.array ([np.nan, np.nan, np.nan])
-    self.cv_feed_pos_pub = rospy.Publisher('/donut/mavros/mocap/pose', PoseStamped, queue_size=100)
+	def reject_outliers(self,data,m=2):
+		# function for removing outliers in an array
+		return data[abs(data - np.mean(data)) < m * np.std(data)]
 
-    self.state_sub = rospy.Subscriber('/donut/mavros/state', State, self.state_cb)
-    self.local_pos_pub = rospy.Publisher('/donut/mavros/setpoint_position/local', PoseStamped, queue_size=100)
+	def state_cb(self,data):
+		# function for holding the current state when the state subscriber is called
+		global current_state
+		current_state = data
 
-    self.arming_client = rospy.ServiceProxy('/donut/mavros/cmd/arming', CommandBool)
-    self.set_mode_client = rospy.ServiceProxy('/donut/mavros/set_mode', SetMode) 
+	def detect_circle(self,data):
+		# main function for LED detection/processing/position estimation
+		global pose_avg_store, cv_avg_poses
+	
+		# attempt to convert the raw image to opencv
+		try:
+			img = self.bridge.imgmsg_to_cv2(data, 'bgr8')
+		except CvBridgeError as e:
+			print(e)
 
-  def reject_outliers(self,data,m=2):
-    return data[abs(data - np.mean(data)) < m * np.std(data)]
+		# blur image edges
+		img = cv2.medianBlur(img, 3)
 
-  def state_cb(self,data):
-    global current_state
-    current_state = data
+		# convert from bgr to hsv
+		hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+	
+		# threshold the HSV image, keep only the red pixels
+		lower_red_hue_range = cv2.inRange(hsv, (0, 100, 100), (10, 255, 255))
+		upper_red_hue_range = cv2.inRange(hsv, (160, 100, 100), (179, 255, 255))
+	
+		# Combine the above two images
+		red_hue_image = cv2.addWeighted(lower_red_hue_range, 1.0, upper_red_hue_range, 1.0, 0.0)
+		red_hue_image = cv2.GaussianBlur(red_hue_image, (9, 9), 2, 2)
 
-  def detect_circle(self,data):
-    global pose_avg_store, cv_avg_poses
+		# detect contours
+		_, contours, heirarchy = cv2.findContours(red_hue_image,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 
-    try:
-      img = self.bridge.imgmsg_to_cv2(data, 'bgr8')
-    except CvBridgeError as e:
-      print(e)
+		# check that two contours exist (outside and inside eges of LED)
+		if len(contours) < 2:
+			self.cv_pose = np.array([np.nan, np.nan, np.nan])
+		else:
+			# extract the outer and inner edges of the LED
+			outer_cnt = contours[0]
+			inner_cnt = contours[1]
 
-    # blur image edges
-    img = cv2.medianBlur(img, 3)
+			# compute the equivalent diameters of the inner/outer edges
+			outer_area = cv2.contourArea(outer_cnt)
+			inner_area = cv2.contourArea(inner_cnt)
+			outer_dia = np.sqrt(4.0*outer_area/np.pi)
+			inner_dia = np.sqrt(4.0*inner_area/np.pi)
 
-    # convert from bgr to hsv
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+			# find the centers of the inner/outer edges
+			outer_M = cv2.moments(outer_cnt)
+			inner_M = cv2.moments(inner_cnt)
+			outer_cx = outer_M['m10']/outer_M['m00']
+			outer_cy = outer_M['m01']/outer_M['m00']
+			inner_cx = inner_M['m10']/inner_M['m00']
+			inner_cy = inner_M['m01']/inner_M['m00']
 
-    # threshold the HSV image, keep only the red pixels
-    lower_red_hue_range = cv2.inRange(hsv, (0, 100, 100), (10, 255, 255))
-    upper_red_hue_range = cv2.inRange(hsv, (160, 100, 100), (179, 255, 255))
+			# take the averages of the values calculated above
+			led_x = (outer_cx + inner_cx)/2
+			led_y = (outer_cy + inner_cy)/2
+			led_dia = (outer_dia + inner_dia)/2
 
-    # Combine the above two images
-    red_hue_image = cv2.addWeighted(lower_red_hue_range, 1.0, upper_red_hue_range, 1.0, 0.0)
-    red_hue_image = cv2.GaussianBlur(red_hue_image, (9, 9), 2, 2)
+			# extract information about the cameras view
+			img_height, img_width, _ = img.shape
+			img_center_x = img_width/2
+			img_center_y = img_height/2
+			diff_x = img_center_x - led_x
+			diff_y = led_y - img_center_y
+			fov = np.radians(80)
+			foc_len = (img_width/2)/(np.tan(fov/2))
+		
+			# compute position of MAV from above values and known LED diameter
+			led_dia_irl = 0.2413
+			unit_dist = led_dia_irl/led_dia
+			self.cv_pose[0] = diff_y*unit_dist
+			self.cv_pose[1] = diff_x*unit_dist
+			self.cv_pose[2] = foc_len*unit_dist
 
-    # detect contours
-    _, contours, heirarchy = cv2.findContours(red_hue_image,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+			# group position estimates and store averages
+			if pose_avg_store >= 0:
+				pose_avg_store -= 1
+				cv_avg_poses[pose_avg_store,:] = self.cv_pose
+			elif pose_avg_store == -1:
+				pose_avg_store = 5
+				self.cv_pose_avg = np.mean(cv_avg_poses, axis=0)
 
-    if len(contours) < 2:
-      self.cv_pose = np.array([np.nan, np.nan, np.nan])
-    else:
-      outer_cnt = contours[0]
-      inner_cnt = contours[1]
+			# display LED detection on image with a cricle and center point
+			img = cv2.circle(img, (np.uint16(led_x),np.uint16(led_y)), np.uint16(led_dia)/2, (0,255,0), 2)
+			img = cv2.circle(img, (np.uint16(led_x),np.uint16(led_y)), 2, (255,0,0), 3)
 
-      outer_area = cv2.contourArea(outer_cnt)
-      inner_area = cv2.contourArea(inner_cnt)
-      outer_dia = np.sqrt(4.0*outer_area/np.pi)
-      inner_dia = np.sqrt(4.0*inner_area/np.pi)
+			# display image
+			cv2.imshow("Image Stream", img)
+			cv2.waitKey(3)
 
-      outer_M = cv2.moments(outer_cnt)
-      inner_M = cv2.moments(inner_cnt)
-      outer_cx = outer_M['m10']/outer_M['m00']
-      outer_cy = outer_M['m01']/outer_M['m00']
-      inner_cx = inner_M['m10']/inner_M['m00']
-      inner_cy = inner_M['m01']/inner_M['m00']
+	def position_control(self):
+		global desired_pose, pose_lag, pose_iter, pose_switch
+		
+		# check that cv position estimates exist
+		if np.isfinite(self.cv_pose).any():
+			# delay position changes/publishing cv estimates
+			if pose_lag >= 0:
+				pose_lag -= 1
+			# shift position of MAV to center of image 
+			elif pose_lag == -1 and pose_iter == 1:
+				pose_lag = 500
+				pose_iter -= 1
 
-      led_x = (outer_cx + inner_cx)/2
-      led_y = (outer_cy + inner_cy)/2
-      led_dia = (outer_dia + inner_dia)/2
+				cv_shift = np.subtract(np.array([0.0, 0.0, 3.0]), self.cv_pose_avg)
+				desired_pose = np.add(desired_pose, cv_shift)
+			# publish cv estimates to motion capture node
+			elif pose_lag <= -1 and pose_iter == 0:
+				pose_lag -= 1
 
-      img_height, img_width, _ = img.shape
-      img_center_x = img_width/2
-      img_center_y = img_height/2
-      diff_x = img_center_x - led_x
-      diff_y = led_y - img_center_y
-      fov = np.radians(80)
-      foc_len = (img_width/2)/(np.tan(fov/2))
+				feed_pose = PoseStamped()
+				feed_pose.pose.position.x = self.cv_pose_avg[0] - 3.0
+				feed_pose.pose.position.y = self.cv_pose_avg[1] - 5.0
+				feed_pose.pose.position.z = self.cv_pose_avg[2] + 0.683514
 
-      led_dia_irl = 0.2413
-      unit_dist = led_dia_irl/led_dia
-      self.cv_pose[0] = diff_y*unit_dist
-      self.cv_pose[1] = diff_x*unit_dist
-      self.cv_pose[2] = foc_len*unit_dist
-      
-      if pose_avg_store >= 0:
-        pose_avg_store -= 1
-        cv_avg_poses[pose_avg_store,:] = self.cv_pose
-      elif pose_avg_store == -1:
-        pose_avg_store = 5
-        self.cv_pose_avg = np.mean(cv_avg_poses, axis=0)
+				# publish pose 	
+				feed_pose.header.stamp = rospy.Time.now()
+				self.cv_feed_pos_pub.publish(feed_pose)
 
-      img = cv2.circle(img, (np.uint16(led_x),np.uint16(led_y)), np.uint16(led_dia)/2, (0,255,0), 2)
-      img = cv2.circle(img, (np.uint16(led_x),np.uint16(led_y)), 2, (255,0,0), 3)
+				# update desired pose now that cv estimate is being fed back
+				if pose_lag <= -200 and pose_switch == 1:
+					pose_switch = 0
 
-      cv2.imshow("Image Stream", img)
-      cv2.waitKey(3)
+					cv_shift = np.subtract(np.array([0.0, 0.0, 3.0]), self.cv_pose_avg)
+					desired_pose = np.add(desired_pose, cv_shift)
 
-  def position_control(self):
-    global desired_pose, pose_lag, pose_iter, pose_switch
+		# desired pose to be published
+		pose = PoseStamped()
+		pose.pose.position.x = desired_pose[0]
+		pose.pose.position.y = desired_pose[1]
+		pose.pose.position.z = desired_pose[2]
 
-    if np.isfinite(self.cv_pose).any():
-      if pose_lag >= 0:
-        pose_lag -= 1
-      elif pose_lag == -1 and pose_iter == 1:
-        pose_lag = 500
-        pose_iter -= 1
+		# update timestamp and publish pose 
+		pose.header.stamp = rospy.Time.now()
+		self.local_pos_pub.publish(pose)
 
-        cv_shift = np.subtract(np.array([0.0, 0.0, 1.5]), self.cv_pose_avg)
-        desired_pose = np.add(desired_pose, cv_shift)
-      elif pose_lag <= -1 and pose_iter == 0:
-      	pose_lag -= 1
-
-        feed_pose = PoseStamped()
-        feed_pose.pose.position.x = self.cv_pose_avg[0] - 3.0
-        feed_pose.pose.position.y = self.cv_pose_avg[1] - 5.0
-        feed_pose.pose.position.z = self.cv_pose_avg[2] + 0.683514
-  
-        # publish pose 
-        feed_pose.header.stamp = rospy.Time.now()
-        self.cv_feed_pos_pub.publish(feed_pose)
-
-        if pose_lag <= -200 and pose_switch == 1:
-        	pose_switch = 0
-
-        	cv_shift = np.subtract(np.array([0.0, 0.0, 1.5]), self.cv_pose_avg)
-        	desired_pose = np.add(desired_pose, cv_shift)
-
-    pose = PoseStamped()
-    pose.pose.position.x = desired_pose[0]
-    pose.pose.position.y = desired_pose[1]
-    pose.pose.position.z = desired_pose[2]
-  
-    # Update timestamp and publish pose 
-    pose.header.stamp = rospy.Time.now()
-    self.local_pos_pub.publish(pose)
-
+# globals used primarily in keeping track of the state of the MAV
 offb_set_mode = SetMode
 current_state = State()
 
@@ -160,45 +187,49 @@ pose_switch = 1
 pose_avg_store = 5
 cv_avg_poses = np.empty((pose_avg_store,3))
 
+# main function for exectuing donut_docking node
 def main():
-  dd = donut_docking()
-  rospy.init_node('donut_docking')
-  
-  global current_state
-  prev_state = current_state
+	# call donut_docking class and initialize node
+	dd = donut_docking()
+	rospy.init_node('donut_docking')
 
-  rate = rospy.Rate(20.0) # MUST be more then 2Hz
+	global current_state
+	prev_state = current_state
 
-  # send a few setpoints before starting
-  for i in range(100):
-    dd.position_control()
-    rate.sleep()
+	# data rate (must be more than 2Hz)
+	rate = rospy.Rate(20.0)
+
+	# send a few position setpoints before starting
+	for i in range(100):
+		dd.position_control()
+		rate.sleep()
     
-  # wait for FCU connection
-  while not current_state.connected:
-    rate.sleep()
+	# wait for FCU connection
+	while not current_state.connected:
+		rate.sleep()
 
-  last_request = rospy.get_rostime()
-  while not rospy.is_shutdown():
-    now = rospy.get_rostime()
-    if current_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
-      dd.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
-      last_request = now 
-    else:
-      if not current_state.armed and (now - last_request > rospy.Duration(5.)):
-        dd.arming_client(True)
-        last_request = now 
+	# arm the MAV and set to OFFBOARD mode
+	last_request = rospy.get_rostime()
+	while not rospy.is_shutdown():
+		now = rospy.get_rostime()
+		if current_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
+			dd.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+			last_request = now 
+		else:
+			if not current_state.armed and (now - last_request > rospy.Duration(5.)):
+				dd.arming_client(True)
+				last_request = now 
 
-    # older versions of PX4 always return success==True, so better to check Status instead
-    if prev_state.armed != current_state.armed:
-      rospy.loginfo("Vehicle armed: %r" % current_state.armed)
-    if prev_state.mode != current_state.mode: 
-      rospy.loginfo("Current mode: %s" % current_state.mode)
-    prev_state = current_state
-
-    # Update timestamp and publish pose 
-    dd.position_control()
-    rate.sleep()
+		# log MAV state and mode changes
+		if prev_state.armed != current_state.armed:
+			rospy.loginfo("Vehicle armed: %r" % current_state.armed)
+		if prev_state.mode != current_state.mode:
+			rospy.loginfo("Current mode: %s" % current_state.mode)
+		prev_state = current_state
+		
+		# call position_control function to update timestamp and publish pose  
+		dd.position_control()
+		rate.sleep()
 
 if __name__ == '__main__':
-  main()
+	main()
