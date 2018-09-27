@@ -10,6 +10,7 @@ from nav_msgs.msg import Odometry
 from mavros_msgs.msg import State
 from mavros_msgs.srv import CommandBool, SetMode
 from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import TwistStamped
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 
@@ -25,9 +26,10 @@ class donut_docking:
 		self.cv_pose = np.array([np.nan, np.nan, np.nan])
 		self.cv_pose_avg = np.array ([np.nan, np.nan, np.nan])
 		# cv pose publisher (motion capture)
-		self.cv_feed_pos_pub = rospy.Publisher('/donut/mavros/mocap/pose', PoseStamped, queue_size=100)
-		# mav position setpoint publisher 
-		self.local_pos_pub = rospy.Publisher('/donut/mavros/setpoint_position/local', PoseStamped, queue_size=100)
+		self.cv_feed_pos_pub = rospy.Publisher('/donut/mavros/mocap/pose', PoseStamped, queue_size=20)
+		# mav position/velocity setpoint publisher 
+		self.local_pos_pub = rospy.Publisher('/donut/mavros/setpoint_position/local', PoseStamped, queue_size=20)
+		self.local_vel_pub = rospy.Publisher('/donut/mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=20)
 	
 		# subscriber for the current state
 		self.state_sub = rospy.Subscriber('/donut/mavros/state', State, self.state_cb)
@@ -131,7 +133,7 @@ class donut_docking:
 			cv2.waitKey(3)
 
 	def position_control(self):
-		global desired_pose, pose_lag, pose_iter, pose_switch
+		global desired_pose, pose_lag, pose_iter, vel_switch
 		
 		# check that cv position estimates exist
 		if np.isfinite(self.cv_pose).any():
@@ -140,49 +142,62 @@ class donut_docking:
 				pose_lag -= 1
 			# shift position of MAV to center of image 
 			elif pose_lag == -1 and pose_iter == 1:
-				pose_lag = 500
+				pose_lag = 200
 				pose_iter -= 1
 
 				cv_shift = np.subtract(np.array([0.0, 0.0, 3.0]), self.cv_pose_avg)
 				desired_pose = np.add(desired_pose, cv_shift)
-			# publish cv estimates to motion capture node
-			elif pose_lag <= -1 and pose_iter == 0:
-				pose_lag -= 1
 
-				feed_pose = PoseStamped()
-				feed_pose.pose.position.x = self.cv_pose_avg[0] - 3.0
-				feed_pose.pose.position.y = self.cv_pose_avg[1] - 5.0
-				feed_pose.pose.position.z = self.cv_pose_avg[2] + 0.683514
+		if vel_switch == 0:
+			# desired pose to be published
+			pose = PoseStamped()
+			pose.pose.position.x = desired_pose[0]
+			pose.pose.position.y = desired_pose[1]
+			pose.pose.position.z = desired_pose[2]
 
-				# publish pose 	
-				feed_pose.header.stamp = rospy.Time.now()
-				self.cv_feed_pos_pub.publish(feed_pose)
+			# update timestamp and publish pose 
+			pose.header.stamp = rospy.Time.now()
+			self.local_pos_pub.publish(pose)
+		elif vel_switch == 1:
+			vel = TwistStamped()
+			vel.twist.linear.z = -0.5
 
-				# update desired pose now that cv estimate is being fed back
-				if pose_lag <= -200 and pose_switch == 1:
-					pose_switch = 0
+			pose = PoseStamped()
+			pose.pose.position.x = desired_pose[0]
+			pose.pose.position.y = desired_pose[1]
 
-					cv_shift = np.subtract(np.array([0.0, 0.0, 3.0]), self.cv_pose_avg)
-					desired_pose = np.add(desired_pose, cv_shift)
+			# update timestamp and publish velocity 
+			vel.header.stamp = rospy.Time.now()
+			self.local_vel_pub.publish(vel)
 
-		# desired pose to be published
-		pose = PoseStamped()
-		pose.pose.position.x = desired_pose[0]
-		pose.pose.position.y = desired_pose[1]
-		pose.pose.position.z = desired_pose[2]
+			# update timestamp and publish pose 
+			pose.header.stamp = rospy.Time.now()
+			self.local_pos_pub.publish(pose)
 
-		# update timestamp and publish pose 
-		pose.header.stamp = rospy.Time.now()
-		self.local_pos_pub.publish(pose)
+	def mocap_feedback(self):
+		global pose_lag, pose_iter
+
+		# publish cv estimates to motion capture node
+		if pose_lag <= -1 and pose_iter == 0:
+			pose_lag -= 1
+
+			feed_pose = PoseStamped()
+			feed_pose.pose.position.x = self.cv_pose_avg[0] - 3.0
+			feed_pose.pose.position.y = self.cv_pose_avg[1] - 5.0
+			feed_pose.pose.position.z = self.cv_pose_avg[2] + 0.683514
+
+			# publish pose 	
+			feed_pose.header.stamp = rospy.Time.now()
+			self.cv_feed_pos_pub.publish(feed_pose)
 
 # globals used primarily in keeping track of the state of the MAV
 offb_set_mode = SetMode
 current_state = State()
 
 desired_pose = np.array([-1.0, -4.0, 6.0])
-pose_lag = 500
+pose_lag = 200
 pose_iter = 1
-pose_switch = 1
+vel_switch = 0
 
 pose_avg_store = 5
 cv_avg_poses = np.empty((pose_avg_store,3))
@@ -229,6 +244,7 @@ def main():
 		
 		# call position_control function to update timestamp and publish pose  
 		dd.position_control()
+		dd.mocap_feedback()
 		rate.sleep()
 
 if __name__ == '__main__':

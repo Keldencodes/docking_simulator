@@ -1,36 +1,40 @@
 <?xml version="1.0"?>
 
 <robot name="donut" xmlns:xacro="http://ros.org/wiki/xacro">
-  <!-- Properties (Taken from Novel Dynamic Inversion Architecture Design
-  for Quadrocopter Control by Jian Wang et al.) -->
-  <xacro:property name="namespace" value="$(arg namespace)" />
+  <!-- Properties -->
+  <xacro:property name="namespace" value="donut" />
   <xacro:property name="rotor_velocity_slowdown_sim" value="20" />
-  <xacro:property name="use_mesh_file" value="true" />
-  <xacro:property name="mesh_file" value="package://docking_description/meshes/donut_visual.dae" />
-  <xacro:property name="collision_mesh_file" value="package://docking_description/meshes/donut_collision.dae" />
-  <xacro:property name="mass" value="0.2" /> <!-- [kg] -->
-  <xacro:property name="body_width" value="0.25" /> <!-- [m] -->
-  <xacro:property name="body_height" value="0.05" /> <!-- [m] -->
-  <xacro:property name="mass_rotor" value="0.0017" /> <!-- [kg] -->
-  <xacro:property name="arm_length" value="0.150" /> <!-- [m] -->
+  <xacro:property name="mesh_file" value="model://meshes/donut_visual.dae"/>
+  <xacro:property name="collision_mesh_file" value="model://meshes/donut_collision.dae"/>
+  <xacro:property name="mesh_scale" value="1 1 1"/>
+  <xacro:property name="mass" value="1.5" /> <!-- [kg] -->
+  <xacro:property name="body_width" value="0.47" /> <!-- [m] -->
+  <xacro:property name="body_height" value="0.11" /> <!-- [m] -->
+  <xacro:property name="mass_rotor" value="0.005" /> <!-- [kg] -->
+  <xacro:property name="arm_length" value="0.15" /> <!-- [m] -->
   <xacro:property name="rotor_offset_top" value="0.056" /> <!-- [m] -->
   <xacro:property name="radius_rotor" value="0.0508" /> <!-- [m] -->
-  <xacro:property name="motor_constant" value="6.397622622e-07" /> <!-- [kg m/s^2] -->
-  <xacro:property name="moment_constant" value="0.0042" /> <!-- [m] -->
+  <xacro:property name="motor_constant" value="8.54858e-06" /> <!-- [kg.m/s^2] -->
+  <xacro:property name="moment_constant" value="0.06" /> <!-- [m] -->
   <xacro:property name="time_constant_up" value="0.0125" /> <!-- [s] -->
   <xacro:property name="time_constant_down" value="0.025" /> <!-- [s] -->
-  <xacro:property name="max_rot_velocity" value="3140" /> <!-- [rad/s] -->
-  <xacro:property name="rotor_drag_coefficient" value="8.06428e-05" />
-  <xacro:property name="rolling_moment_coefficient" value="1e-06" />
+  <xacro:property name="max_rot_velocity" value="1100" /> <!-- [rad/s] -->
+  <xacro:property name="rotor_drag_coefficient" value="8.06428e-04" />
+  <xacro:property name="rolling_moment_coefficient" value="0.000001" />
+  <xacro:property name="color" value="$(arg visual_material)" />
 
   <!-- Property Blocks -->
   <xacro:property name="body_inertia">
-    <inertia ixx="0.0019314217" ixy="0.0" ixz="0.0" iyy="0.0038365059" iyz="0.0" izz="0.0019314217" /> <!-- [kg m^2] [kg m^2] [kg m^2] [kg m^2] [kg m^2] [kg m^2] -->
+    <inertia ixx="0.0347563" ixy="0.0" ixz="0.0" iyy="0.0458929" iyz="0.0" izz="0.0977" /> <!-- [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] -->
   </xacro:property>
 
   <!-- inertia of a single rotor, assuming it is a cuboid. Height=3mm, width=15mm -->
   <xacro:property name="rotor_inertia">
-    <xacro:box_inertia x="${radius_rotor}" y="0.015" z="0.003" mass="${mass_rotor*rotor_velocity_slowdown_sim}" />
+    <inertia
+    ixx="${1/12 * mass_rotor * (0.015 * 0.015 + 0.003 * 0.003) * rotor_velocity_slowdown_sim}"
+    iyy="${1/12 * mass_rotor * (4 * radius_rotor * radius_rotor + 0.003 * 0.003) * rotor_velocity_slowdown_sim}"
+    izz="${1/12 * mass_rotor * (4 * radius_rotor * radius_rotor + 0.015 * 0.015) * rotor_velocity_slowdown_sim}"
+    ixy="0.0" ixz="0.0"  iyz="0.0" /> <!-- [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] -->
   </xacro:property>
 
   <!-- Included URDF Files -->
@@ -42,19 +46,12 @@
     mass="${mass}"
     body_width="${body_width}"
     body_height="${body_height}"
-    use_mesh_file="${use_mesh_file}"
-    mesh_file="${mesh_file}">
+    mesh_file="${mesh_file}"
+    mesh_scale="${mesh_scale}"
+    color="${color}"
+    >
     <xacro:insert_block name="body_inertia" />
   </xacro:multirotor_base_macro>
-
-  <!-- attach multirotor_base_plugin to the base_link -->
-  <gazebo>
-    <plugin name="rosbag" filename="libgazebo_multirotor_base_plugin.so">
-      <robotNamespace>${namespace}</robotNamespace>
-      <linkName>${namespace}/base_link</linkName>
-      <rotorVelocitySlowdownSim>${rotor_velocity_slowdown_sim}</rotorVelocitySlowdownSim>
-    </plugin>
-  </gazebo>
 
   <!-- Instantiate rotors -->
   <xacro:vertical_rotor
@@ -72,9 +69,8 @@
     motor_number="0"
     rotor_drag_coefficient="${rotor_drag_coefficient}"
     rolling_moment_coefficient="${rolling_moment_coefficient}"
-    color="Blue"
-    use_own_mesh="false"
-    mesh="">
+    mesh="propeller"
+    color="Blue">
     <origin xyz="${arm_length*0.707} -${arm_length*0.707} ${rotor_offset_top}" rpy="0 0 0" />
     <xacro:insert_block name="rotor_inertia" />
   </xacro:vertical_rotor>
@@ -94,15 +90,13 @@
     motor_number="1"
     rotor_drag_coefficient="${rotor_drag_coefficient}"
     rolling_moment_coefficient="${rolling_moment_coefficient}"
-    color="Green"
-    use_own_mesh="false"
-    mesh="">
+    mesh="propeller"
+    color="Green">
     <origin xyz="-${arm_length*0.707} ${arm_length*0.707} ${rotor_offset_top}" rpy="0 0 0" />
     <xacro:insert_block name="rotor_inertia" />
   </xacro:vertical_rotor>
 
-  <xacro:vertical_rotor
-    robot_namespace="${namespace}"
+  <xacro:vertical_rotor robot_namespace="${namespace}"
     suffix="front_left"
     direction="cw"
     motor_constant="${motor_constant}"
@@ -116,15 +110,13 @@
     motor_number="2"
     rotor_drag_coefficient="${rotor_drag_coefficient}"
     rolling_moment_coefficient="${rolling_moment_coefficient}"
-    color="Blue"
-    use_own_mesh="false"
-    mesh="">
+    mesh="propeller"
+    color="Blue">
     <origin xyz="${arm_length*0.707} ${arm_length*0.707} ${rotor_offset_top}" rpy="0 0 0" />
     <xacro:insert_block name="rotor_inertia" />
   </xacro:vertical_rotor>
 
-  <xacro:vertical_rotor
-    robot_namespace="${namespace}"
+  <xacro:vertical_rotor robot_namespace="${namespace}"
     suffix="back_right"
     direction="cw"
     motor_constant="${motor_constant}"
@@ -138,92 +130,10 @@
     motor_number="3"
     rotor_drag_coefficient="${rotor_drag_coefficient}"
     rolling_moment_coefficient="${rolling_moment_coefficient}"
-    color="Green"
-    use_own_mesh="false"
-    mesh="">
+    mesh="propeller"
+    color="Green">
     <origin xyz="-${arm_length*0.707} -${arm_length*0.707} ${rotor_offset_top}" rpy="0 0 0" />
     <xacro:insert_block name="rotor_inertia" />
   </xacro:vertical_rotor>
-
-  <gazebo>
-    <plugin name='gps_plugin' filename='libgazebo_gps_plugin.so'>
-      <robotNamespace>${namespace}</robotNamespace>
-      <gpsNoise>true</gpsNoise>
-    </plugin>
-  </gazebo>
-
-  <gazebo>
-    <plugin name="mavlink_interface" filename="libgazebo_mavlink_interface.so">
-    <robotNamespace>${namespace}</robotNamespace>
-    <imuSubTopic>/imu</imuSubTopic>
-    <gpsSubTopic>/gps</gpsSubTopic>
-    <mavlink_addr>INADDR_ANY</mavlink_addr>
-    <mavlink_udp_port>14560</mavlink_udp_port>
-    <serialEnabled>false</serialEnabled>
-    <serialDevice>/dev/ttyACM0</serialDevice>
-    <baudRate>921600</baudRate>
-    <qgc_addr>INADDR_ANY</qgc_addr>
-    <qgc_udp_port>14550</qgc_udp_port>
-    <hil_mode>false</hil_mode>
-    <hil_state_level>false</hil_state_level>
-    <vehicle_is_tailsitter>false</vehicle_is_tailsitter>
-    <send_odometry>false</send_odometry>
-    <motorSpeedCommandPubTopic>/gazebo/command/motor_speed</motorSpeedCommandPubTopic>
-    <control_channels>
-      <channel name="${namespace}/rotor_0_joint">
-        <input_index>0</input_index>
-        <input_offset>0</input_offset>
-        <input_scaling>1000</input_scaling>
-        <zero_position_disarmed>0</zero_position_disarmed>
-        <zero_position_armed>100</zero_position_armed>
-        <joint_control_type>velocity</joint_control_type>
-        <joint_name>${namespace}/rotor_0_joint</joint_name>
-      </channel>
-      <channel name="${namespace}/rotor_1_joint">
-        <input_index>1</input_index>
-        <input_offset>0</input_offset>
-        <input_scaling>1000</input_scaling>
-        <zero_position_disarmed>0</zero_position_disarmed>
-        <zero_position_armed>100</zero_position_armed>
-        <joint_control_type>velocity</joint_control_type>
-        <joint_name>${namespace}/rotor_1_joint</joint_name>
-      </channel>
-      <channel name="${namespace}/rotor_2_joint">
-        <input_index>2</input_index>
-        <input_offset>0</input_offset>
-        <input_scaling>1000</input_scaling>
-        <zero_position_disarmed>0</zero_position_disarmed>
-        <zero_position_armed>100</zero_position_armed>
-        <joint_control_type>velocity</joint_control_type>
-        <joint_name>${namespace}/rotor_2_joint</joint_name>
-      </channel>
-      <channel name="${namespace}/rotor_3_joint">
-        <input_index>3</input_index>
-        <input_offset>0</input_offset>
-        <input_scaling>1000</input_scaling>
-        <zero_position_disarmed>0</zero_position_disarmed>
-        <zero_position_armed>100</zero_position_armed>
-        <joint_control_type>velocity</joint_control_type>
-        <joint_name>${namespace}/rotor_3_joint</joint_name>
-      </channel>
-    </control_channels>
-    </plugin>
-  </gazebo>
-
-  <gazebo>
-    <plugin name='rotors_gazebo_imu_plugin' filename='libgazebo_imu_plugin.so'>
-      <robotNamespace>${namespace}</robotNamespace>
-      <linkName>${namespace}/imu_link</linkName>
-      <imuTopic>/imu</imuTopic>
-      <gyroscopeNoiseDensity>0.0003394</gyroscopeNoiseDensity>
-      <gyroscopeRandomWalk>3.8785e-05</gyroscopeRandomWalk>
-      <gyroscopeBiasCorrelationTime>1000.0</gyroscopeBiasCorrelationTime>
-      <gyroscopeTurnOnBiasSigma>0.0087</gyroscopeTurnOnBiasSigma>
-      <accelerometerNoiseDensity>0.004</accelerometerNoiseDensity>
-      <accelerometerRandomWalk>0.006</accelerometerRandomWalk>
-      <accelerometerBiasCorrelationTime>300.0</accelerometerBiasCorrelationTime>
-      <accelerometerTurnOnBiasSigma>0.196</accelerometerTurnOnBiasSigma>
-    </plugin>
-  </gazebo>
 
 </robot>
