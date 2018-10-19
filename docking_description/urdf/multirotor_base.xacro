@@ -49,7 +49,12 @@
       <collision>
         <origin xyz="0 0 0" rpy="0 0 0" />
         <geometry>
-          <mesh filename="${collision_mesh_file}" scale="${mesh_scale}" />
+          <xacro:if value="${use_collision_mesh}">
+            <mesh filename="${collision_mesh_file}" scale="${mesh_scale}" />
+          </xacro:if>
+          <xacro:unless value="${use_collision_mesh}">
+            <box size="${body_width} ${body_width} ${body_height}"/>
+          </xacro:unless>
         </geometry>
       </collision>
     </link>
@@ -77,26 +82,6 @@
           </friction>
         </surface>
       </collision>
-   </gazebo>
-
-   <!-- LED -->
-    <link name="${robot_namespace}/led_link">
-      <visual>
-        <origin xyz="0 0 0.0156" rpy="0 0 0" />
-        <geometry>
-          <mesh filename="model://meshes/led.dae" scale="1 1 1" />
-        </geometry>
-      </visual>
-    </link>
-
-    <joint name="${robot_namespace}/led_joint" type="fixed">
-      <origin xyz="0 0 0.0156" rpy="0 0 0" />
-      <parent link="${robot_namespace}/base_link" />
-      <child link="${robot_namespace}/led_link" />
-    </joint>
-
-    <gazebo reference="${robot_namespace}/led_link">
-      <material>Gazebo/Red</material>
     </gazebo>
 
   </xacro:macro>

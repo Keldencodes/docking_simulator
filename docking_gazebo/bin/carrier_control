@@ -1,0 +1,6 @@
+#! /usr/bin/env python
+
+import docking_gazebo.carrier_control
+
+if __name__ == '__main__':
+	docking_gazebo.carrier_control.main()

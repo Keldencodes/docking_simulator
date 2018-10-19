@@ -1,0 +1,6 @@
+#! /usr/bin/env python
+
+import docking_gazebo.in_flight_docking
+
+if __name__ == '__main__':
+	docking_gazebo.in_flight_docking.main()

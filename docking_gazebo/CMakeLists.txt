@@ -24,5 +24,5 @@ endforeach(dir)
 
 catkin_python_setup()
 
-catkin_install_python(PROGRAMS bin/donut_docking
+catkin_install_python(PROGRAMS bin/stationary_docking bin/in_flight_docking bin/carrier_control
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

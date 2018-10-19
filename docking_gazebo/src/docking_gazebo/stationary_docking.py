@@ -6,13 +6,17 @@ import rospy
 import mavros
 import cv2
 from sensor_msgs.msg import Image
-from nav_msgs.msg import Odometry
-from mavros_msgs.msg import State
+from mavros_msgs.msg import State, ActuatorControl
 from mavros_msgs.srv import CommandBool, SetMode
-from geometry_msgs.msg import PoseStamped
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
+
+"""
+TO DO:
+1) Add Kalman filter to CV position estimates
+2) Use real-time to index position and velocity changes
+"""
 
 class donut_docking:
 
@@ -24,22 +28,18 @@ class donut_docking:
 	
 		# arrays to hold cv pose data
 		self.cv_pose = np.array([np.nan, np.nan, np.nan])
-		self.cv_pose_avg = np.array ([np.nan, np.nan, np.nan])
+		self.cv_pose_avg = np.array([np.nan, np.nan, np.nan])
 		# cv pose publisher (motion capture)
 		self.cv_feed_pos_pub = rospy.Publisher('/donut/mavros/mocap/pose', PoseStamped, queue_size=20)
-		# mav position/velocity setpoint publisher 
+		# mav position/actuator control setpoint publisher 
 		self.local_pos_pub = rospy.Publisher('/donut/mavros/setpoint_position/local', PoseStamped, queue_size=20)
-		self.local_vel_pub = rospy.Publisher('/donut/mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=20)
+		self.act_cont = rospy.Publisher('/donut/mavros/actuator_control', ActuatorControl, queue_size=20)
 	
 		# subscriber for the current state
 		self.state_sub = rospy.Subscriber('/donut/mavros/state', State, self.state_cb)
 		# services for arming and setting mode requests
 		self.arming_client = rospy.ServiceProxy('/donut/mavros/cmd/arming', CommandBool)
 		self.set_mode_client = rospy.ServiceProxy('/donut/mavros/set_mode', SetMode) 
-
-	def reject_outliers(self,data,m=2):
-		# function for removing outliers in an array
-		return data[abs(data - np.mean(data)) < m * np.std(data)]
 
 	def state_cb(self,data):
 		# function for holding the current state when the state subscriber is called
@@ -133,7 +133,7 @@ class donut_docking:
 			cv2.waitKey(3)
 
 	def position_control(self):
-		global desired_pose, pose_lag, pose_iter, vel_switch
+		global desired_pose, pose_lag, pose_iter, dock_switch
 		
 		# check that cv position estimates exist
 		if np.isfinite(self.cv_pose).any():
@@ -142,13 +142,19 @@ class donut_docking:
 				pose_lag -= 1
 			# shift position of MAV to center of image 
 			elif pose_lag == -1 and pose_iter == 1:
-				pose_lag = 200
+				pose_lag = 70
 				pose_iter -= 1
 
 				cv_shift = np.subtract(np.array([0.0, 0.0, 3.0]), self.cv_pose_avg)
 				desired_pose = np.add(desired_pose, cv_shift)
+			# correct MAV position once mocap is engaged
+			elif pose_lag == -70 and pose_iter == 0:
+				cv_shift = np.subtract(np.array([0.0, 0.0, 3.0]), self.cv_pose_avg)
+				desired_pose = np.add(desired_pose, cv_shift)
 
-		if vel_switch == 0:
+				dock_switch = 1
+
+		if dock_switch == 0:
 			# desired pose to be published
 			pose = PoseStamped()
 			pose.pose.position.x = desired_pose[0]
@@ -158,21 +164,28 @@ class donut_docking:
 			# update timestamp and publish pose 
 			pose.header.stamp = rospy.Time.now()
 			self.local_pos_pub.publish(pose)
-		elif vel_switch == 1:
-			vel = TwistStamped()
-			vel.twist.linear.z = -0.5
-
+		elif dock_switch == 1:
+			# desired pose to be published
 			pose = PoseStamped()
 			pose.pose.position.x = desired_pose[0]
 			pose.pose.position.y = desired_pose[1]
 
-			# update timestamp and publish velocity 
-			vel.header.stamp = rospy.Time.now()
-			self.local_vel_pub.publish(vel)
+			# kill motors
+			act_cont = ActuatorControl()
+			act_cont.controls[0] = 0.0
+			act_cont.controls[1] = 0.0
+			act_cont.controls[2] = 0.0
+			act_cont.controls[3] = 0.0
 
-			# update timestamp and publish pose 
-			pose.header.stamp = rospy.Time.now()
-			self.local_pos_pub.publish(pose)
+			# send desired poses up to a specified distance from the base
+			if self.cv_pose_avg[2] > 0.5:
+				# update timestamp and publish pose 
+				pose.header.stamp = rospy.Time.now()
+				self.local_pos_pub.publish(pose)
+			else:
+				# update timestamp and kill motors
+				act_cont.header.stamp = rospy.Time.now()
+				self.act_cont.publish(act_cont)
 
 	def mocap_feedback(self):
 		global pose_lag, pose_iter
@@ -195,9 +208,9 @@ offb_set_mode = SetMode
 current_state = State()
 
 desired_pose = np.array([-1.0, -4.0, 6.0])
-pose_lag = 200
+pose_lag = 70
 pose_iter = 1
-vel_switch = 0
+dock_switch = 0
 
 pose_avg_store = 5
 cv_avg_poses = np.empty((pose_avg_store,3))
@@ -212,7 +225,7 @@ def main():
 	prev_state = current_state
 
 	# data rate (must be more than 2Hz)
-	rate = rospy.Rate(20.0)
+	rate = rospy.Rate(7.0)
 
 	# send a few position setpoints before starting
 	for i in range(100):

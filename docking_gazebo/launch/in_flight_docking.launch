@@ -1,0 +1,129 @@
+<?xml version="1.0"?>
+<launch>
+
+    <!-- MAVROS posix SITL environment launch script -->
+    <!-- launches MAVROS, PX4 SITL, Gazebo environment, and spawns vehicle -->
+    
+    <!-- control estimator and world -->
+    <arg name="est" default="lpe"/>
+    <arg name="world" default="$(find mavlink_sitl_gazebo)/worlds/empty.world"/>
+    <!-- gazebo configs -->
+    <env name="GAZEBO_MODEL_PATH" value="$(find docking_description)"/>
+    <arg name="gui" default="true"/>
+    <arg name="debug" default="false"/>
+    <arg name="verbose" default="false"/>
+    <arg name="paused" default="false"/>
+    <arg name="respawn_gazebo" default="false"/>
+    <!-- Gazebo sim -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="gui" value="$(arg gui)"/>
+        <arg name="world_name" value="$(arg world)"/>
+        <arg name="debug" value="$(arg debug)"/>
+        <arg name="verbose" value="$(arg verbose)"/>
+        <arg name="paused" value="$(arg paused)"/>
+        <arg name="respawn_gazebo" value="$(arg respawn_gazebo)"/>
+    </include>
+
+    <group ns="donut">
+        <!-- Vehicle pose -->
+        <arg name="x" default="3.0"/>
+        <arg name="y" default="5.0"/>
+        <arg name="z" default="0.1"/>
+        <arg name="R" default="0"/>
+        <arg name="P" default="0"/>
+        <arg name="Y" default="0"/>
+        <!-- Vehicle parameters -->
+        <arg name="vehicle" default="donut"/>
+        <arg name="airframe" default="iris"/>
+        <arg name="ID" default="1"/>
+        <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg airframe)_$(arg ID)"/>
+        <arg name="mavlink_udp_port" value="14560"/>
+
+        <!-- PX4 configs -->
+        <arg name="interactive" default="true"/>
+        <!-- PX4 SITL -->
+        <arg unless="$(arg interactive)" name="px4_command_arg1" value=""/>
+        <arg     if="$(arg interactive)" name="px4_command_arg1" value="-d"/>
+        <node name="sitl_$(arg ID)" pkg="px4" type="px4" output="screen" args="$(find px4) $(arg rcS) $(arg px4_command_arg1)">
+        </node>
+
+        <!-- Gazebo model -->
+        <arg name="model_name" default="donut"/>
+        <arg name="model" default="$(find docking_description)/urdf/$(arg vehicle)_main.xacro"/>
+        <arg name="rotors_description_dir" default="$(find docking_description)"/>
+        <!-- send the robot XML to param server -->
+        <param name="rotors_description" command="
+        $(find xacro)/xacro $(arg model)
+        rotors_description_dir:=$(arg rotors_description_dir) 
+        mavlink_udp_port:=$(arg mavlink_udp_port) --inorder"
+        />
+        <!-- Spawn model -->
+        <node name="$(arg vehicle)_$(arg ID)_spawn" output="screen" pkg="gazebo_ros" type="spawn_model" args="-urdf -param rotors_description -model $(arg vehicle)_$(arg ID) -package_to_model -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg R) -P $(arg P) -Y $(arg Y)"/>
+
+        <!-- MAVROS configs -->
+        <arg name="fcu_url" default="udp://:14540@localhost:14557"/>
+        <arg name="respawn_mavros" default="false"/>
+        <!-- MAVROS -->
+        <include file="$(find mavros)/launch/px4.launch">
+            <!-- GCS link is provided by SITL -->
+            <arg name="gcs_url" value=""/>
+            <arg name="fcu_url" value="$(arg fcu_url)"/>
+            <arg name="respawn_mavros" value="$(arg respawn_mavros)"/>
+        </include>
+    </group>
+
+    <group ns="iris">
+        <!-- Vehicle pose -->
+        <arg name="x" default="0"/>
+        <arg name="y" default="0"/>
+        <arg name="z" default="0"/>
+        <arg name="R" default="0"/>
+        <arg name="P" default="0"/>
+        <arg name="Y" default="0"/>
+        <!-- Vehicle parameters -->
+        <arg name="vehicle" default="iris"/>
+        <arg name="airframe" default="iris"/>
+        <arg name="ID" default="2"/>
+        <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg airframe)_$(arg ID)"/>
+        <arg name="mavlink_udp_port" value="14562"/>
+
+        <!-- PX4 configs -->
+        <arg name="interactive" default="true"/>
+        <!-- PX4 SITL -->
+        <arg unless="$(arg interactive)" name="px4_command_arg1" value=""/>
+        <arg     if="$(arg interactive)" name="px4_command_arg1" value="-d"/>
+        <node name="sitl_$(arg ID)" pkg="px4" type="px4" output="screen" args="$(find px4) $(arg rcS) $(arg px4_command_arg1)">
+        </node>
+
+        <!-- Gazebo model -->
+        <arg name="model_name" default="iris"/>
+        <arg name="model" default="$(find docking_description)/urdf/$(arg vehicle)_main.xacro"/>
+        <arg name="rotors_description_dir" default="$(find docking_description)"/>
+        <!-- send the robot XML to param server -->
+        <param name="rotors_description" command="
+        $(find xacro)/xacro $(arg model)
+        rotors_description_dir:=$(arg rotors_description_dir) 
+        mavlink_udp_port:=$(arg mavlink_udp_port) --inorder"
+        />
+        <!-- Spawn model -->
+        <node name="$(arg vehicle)_$(arg ID)_spawn" output="screen" pkg="gazebo_ros" type="spawn_model" args="-urdf -param rotors_description -model $(arg vehicle)_$(arg ID) -package_to_model -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg R) -P $(arg P) -Y $(arg Y)"/>
+
+        <!-- MAVROS configs -->
+        <arg name="fcu_url" default="udp://:14541@localhost:14559"/>
+        <arg name="respawn_mavros" default="false"/>
+        <!-- MAVROS -->
+        <include file="$(find mavros)/launch/px4.launch">
+            <!-- GCS link is provided by SITL -->
+            <arg name="gcs_url" value=""/>
+            <arg name="fcu_url" value="$(arg fcu_url)"/>
+            <arg name="respawn_mavros" value="$(arg respawn_mavros)"/>
+            <arg name="tgt_system" value="$(arg ID)"/>
+            <arg name="tgt_component" value="1"/>
+        </include>
+    </group>
+
+    <!-- Control nodes -->
+    <node name="donut_docking" pkg="docking_gazebo" type="in_flight_docking" output="screen" />
+    <node name="carrier_control" pkg="docking_gazebo" type="carrier_control" output="screen" />
+
+</launch>

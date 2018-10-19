@@ -13,11 +13,10 @@
     <!-- vehicle model and world -->
     <arg name="est" default="lpe"/>
     <arg name="vehicle" default="donut"/>
-    <arg name="airframe" default="quad_x"/>
-    <arg name="world" default="$(find mavlink_sitl_gazebo)/worlds/empty.world"/>
+    <arg name="airframe" default="iris"/>
     <arg name="ID" default="1"/>
-    <env name="PX4_SIM_MODEL" value="$(arg airframe)" />
-    <env name="PX4_ESTIMATOR" value="$(arg est)" />
+    <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg airframe)_$(arg ID)"/>
+    <arg name="world" default="$(find mavlink_sitl_gazebo)/worlds/empty.world"/>
     <!-- gazebo configs -->
     <env name="GAZEBO_MODEL_PATH" value="$(find docking_description)"/>
     <arg name="gui" default="true"/>
@@ -49,11 +48,11 @@
         <!-- PX4 configs -->
         <arg name="interactive" default="true"/>
         <!-- PX4 SITL -->
-        <arg unless="$(arg interactive)" name="px4_command_arg1" value="-d"/>
-        <arg     if="$(arg interactive)" name="px4_command_arg1" value=""/>
-        <node name="sitl" pkg="px4" type="px4" output="screen"
-        args="$(find px4)/ROMFS/px4fmu_common -s etc/init.d-posix/rcS $(arg px4_command_arg1)" required="true"/>
-
+        <!-- PX4 SITL -->
+        <arg unless="$(arg interactive)" name="px4_command_arg1" value=""/>
+        <arg     if="$(arg interactive)" name="px4_command_arg1" value="-d"/>
+        <node name="sitl_$(arg ID)" pkg="px4" type="px4" output="screen" args="$(find px4) $(arg rcS) $(arg px4_command_arg1)">
+        </node>
         <!-- Gazebo model -->
         <arg name="model_name" default="donut"/>
         <arg name="model" default="$(find docking_description)/urdf/$(arg vehicle)_main.xacro"/>
@@ -79,6 +78,6 @@
     </group>
 
     <!-- Control Node -->
-    <node name="donut_docking" pkg="docking_gazebo" type="donut_docking" output="screen" />
+    <node name="donut_docking" pkg="docking_gazebo" type="stationary_docking" output="screen" />
 
 </launch>

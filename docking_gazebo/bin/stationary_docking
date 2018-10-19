@@ -1,0 +1,6 @@
+#! /usr/bin/env python
+
+import docking_gazebo.stationary_docking
+
+if __name__ == '__main__':
+	docking_gazebo.stationary_docking.main()
