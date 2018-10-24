@@ -12,11 +12,6 @@ from geometry_msgs.msg import PoseStamped, TwistStamped
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 
-"""
-TO DO:
-1) Add Kalman filter to CV position estimates
-2) Use real-time to index position and velocity changes
-"""
 
 class donut_docking:
 

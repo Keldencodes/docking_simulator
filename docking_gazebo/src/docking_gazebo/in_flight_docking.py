@@ -5,17 +5,19 @@ roslib.load_manifest('docking_gazebo')
 import rospy
 import mavros
 import cv2
-from sensor_msgs.msg import Image
-from mavros_msgs.msg import State, ActuatorControl
+from sensor_msgs.msg import Image, NavSatFix
+from mavros_msgs.msg import State, ActuatorControl, GlobalPositionTarget
 from mavros_msgs.srv import CommandBool, SetMode
-from geometry_msgs.msg import PoseStamped, TwistStamped
+from geometry_msgs.msg import PoseStamped
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 
 """
 TO DO:
-1) Add Kalman filter to CV position estimates
-2) Use real-time to index position and velocity changes
+1) Introduce dead band
+2) Reduce motor kill distance
+3) Add Kalman filter to CV position estimates and remove simple averaging
+4) Use real-time to index position and velocity changes
 """
 
 class donut_docking:
@@ -31,10 +33,15 @@ class donut_docking:
 		self.cv_pose_avg = np.array([np.nan, np.nan, np.nan])
 		# cv pose publisher (motion capture)
 		self.cv_feed_pos_pub = rospy.Publisher('/donut/mavros/mocap/pose', PoseStamped, queue_size=20)
+
 		# mav position/actuator control setpoint publisher 
 		self.local_pos_pub = rospy.Publisher('/donut/mavros/setpoint_position/local', PoseStamped, queue_size=20)
 		self.act_cont = rospy.Publisher('/donut/mavros/actuator_control', ActuatorControl, queue_size=20)
-	
+		self.gps_donut_pub = rospy.Publisher('/donut/mavros/setpoint_position/global', GlobalPositionTarget, queue_size=20)
+		# subscribers
+		self.gps_carrier_sub = rospy.Subscriber('/iris/mavros/global_position/global', NavSatFix, self.gps_cb)
+		self.local_pos_sub = rospy.Subscriber('/donut/mavros/local_position/pose', PoseStamped, self.pose_cb)
+
 		# subscriber for the current state
 		self.state_sub = rospy.Subscriber('/donut/mavros/state', State, self.state_cb)
 		# services for arming and setting mode requests
@@ -45,6 +52,16 @@ class donut_docking:
 		# function for holding the current state when the state subscriber is called
 		global current_state
 		current_state = data
+
+	def gps_cb(self,data):
+		global gps_carrier
+		gps_carrier = data
+
+	def pose_cb(self,data):
+		global pose_donut
+		pose_donut[0] = data.pose.position.x
+		pose_donut[1] = data.pose.position.y
+		pose_donut[2] = data.pose.position.z
 
 	def detect_circle(self,data):
 		# main function for LED detection/processing/position estimation
@@ -128,13 +145,21 @@ class donut_docking:
 			img = cv2.circle(img, (np.uint16(led_x),np.uint16(led_y)), np.uint16(led_dia)/2, (0,255,0), 2)
 			img = cv2.circle(img, (np.uint16(led_x),np.uint16(led_y)), 2, (255,0,0), 3)
 
+			# calculate dead zone diameter to display
+			dead_dia_irl = 0.1524
+			dead_led_ratio = dead_dia_irl/led_dia_irl
+			dead_dia = dead_led_ratio*led_dia
+
+			# display dead zone
+			img = cv2.circle(img, (np.uint16(img_center_x),np.uint16(img_center_y)), np.uint16(dead_dia)/2, (0,0,0), 2)
+
 			# display image
 			cv2.imshow("Image Stream", img)
 			cv2.waitKey(3)
 
 	def position_control(self):
-		global desired_pose, pose_lag, pose_iter, dock_switch
-		
+		global desired_pose, pose_lag, pose_iter, dock_switch, gps_carrier, gps_switch, pose_donut, cam_alt, init_loc_pose
+
 		# check that cv position estimates exist
 		if np.isfinite(self.cv_pose).any():
 			# delay position changes/publishing cv estimates
@@ -144,9 +169,14 @@ class donut_docking:
 			elif pose_lag == -1 and pose_iter == 1:
 				pose_lag = 70
 				pose_iter -= 1
+				# switch to local positioning coordinate system
+				gps_switch = 0
 
+				cam_alt = pose_donut[2] - self.cv_pose_avg[2]
+				print(cam_alt)
 				cv_shift = np.subtract(np.array([0.0, 0.0, 3.0]), self.cv_pose_avg)
-				desired_pose = np.add(desired_pose, cv_shift)
+				desired_pose = np.add(pose_donut, cv_shift)
+				init_loc_pose = desired_pose
 			# correct MAV position once mocap is engaged
 			elif pose_lag == -70 and pose_iter == 0:
 				cv_shift = np.subtract(np.array([0.0, 0.0, 3.0]), self.cv_pose_avg)
@@ -155,15 +185,26 @@ class donut_docking:
 				dock_switch = 1
 
 		if dock_switch == 0:
-			# desired pose to be published
-			pose = PoseStamped()
-			pose.pose.position.x = desired_pose[0]
-			pose.pose.position.y = desired_pose[1]
-			pose.pose.position.z = desired_pose[2]
+			if gps_switch == 0:
+				# desired pose to be published
+				pose = PoseStamped()
+				pose.pose.position.x = desired_pose[0]
+				pose.pose.position.y = desired_pose[1]
+				pose.pose.position.z = desired_pose[2]
 
-			# update timestamp and publish pose 
-			pose.header.stamp = rospy.Time.now()
-			self.local_pos_pub.publish(pose)
+				# update timestamp and publish pose 
+				pose.header.stamp = rospy.Time.now()
+				self.local_pos_pub.publish(pose)
+			elif gps_switch == 1:
+				# desired pose to be published
+				gps_donut = GlobalPositionTarget()
+				gps_donut.latitude = gps_carrier.latitude
+				gps_donut.longitude = gps_carrier.longitude
+				gps_donut.altitude = gps_carrier.altitude + 6.0
+
+				# update timestamp and publish pose 
+				gps_donut.header.stamp = rospy.Time.now()
+				self.gps_donut_pub.publish(gps_donut)
 		elif dock_switch == 1:
 			# desired pose to be published
 			pose = PoseStamped()
@@ -188,16 +229,16 @@ class donut_docking:
 				self.act_cont.publish(act_cont)
 
 	def mocap_feedback(self):
-		global pose_lag, pose_iter
+		global pose_lag, pose_iter, init_loc_pose, cam_alt
 
 		# publish cv estimates to motion capture node
 		if pose_lag <= -1 and pose_iter == 0:
 			pose_lag -= 1
 
 			feed_pose = PoseStamped()
-			feed_pose.pose.position.x = self.cv_pose_avg[0] - 3.0
-			feed_pose.pose.position.y = self.cv_pose_avg[1] - 5.0
-			feed_pose.pose.position.z = self.cv_pose_avg[2] + 1.683514
+			feed_pose.pose.position.x = self.cv_pose_avg[0] + init_loc_pose[0]
+			feed_pose.pose.position.y = self.cv_pose_avg[1] + init_loc_pose[1]
+			feed_pose.pose.position.z = self.cv_pose_avg[2] + cam_alt
 
 			# publish pose 	
 			feed_pose.header.stamp = rospy.Time.now()
@@ -206,11 +247,15 @@ class donut_docking:
 # globals used primarily in keeping track of the state of the MAV
 offb_set_mode = SetMode
 current_state = State()
+gps_carrier = NavSatFix()
+pose_donut = np.array([np.nan, np.nan, np.nan])
+init_loc_pose = np.array([np.nan, np.nan, np.nan])
+cam_alt = np.nan
 
-desired_pose = np.array([-1.0, -4.0, 6.0])
 pose_lag = 70
 pose_iter = 1
 dock_switch = 0
+gps_switch = 1
 
 pose_avg_store = 5
 cv_avg_poses = np.empty((pose_avg_store,3))
@@ -255,7 +300,7 @@ def main():
 			rospy.loginfo("Current mode: %s" % current_state.mode)
 		prev_state = current_state
 		
-		# call position_control function to update timestamp and publish pose  
+		# call position_control functions to update timestamp and publish pose  
 		dd.position_control()
 		dd.mocap_feedback()
 		rate.sleep()

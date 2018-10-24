@@ -6,7 +6,7 @@ import rospy
 import mavros
 from mavros_msgs.msg import State
 from mavros_msgs.srv import CommandBool, SetMode
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 import numpy as np
 
 
@@ -15,6 +15,7 @@ class carrier_control:
 	def __init__(self):
 		# mav position/actuator control setpoint publisher 
 		self.local_pos_pub = rospy.Publisher('/iris/mavros/setpoint_position/local', PoseStamped, queue_size=20)
+		self.vel_pub = rospy.Publisher('/iris/mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=20)
 	
 		# subscriber for the current state
 		self.state_sub = rospy.Subscriber('/iris/mavros/state', State, self.state_cb)
@@ -28,18 +29,41 @@ class carrier_control:
 		current_state = data
 
 	def position_control(self):
-		# desired pose to be published
-		pose = PoseStamped()
-		pose.pose.position.x = 0.0
-		pose.pose.position.y = 0.0
-		pose.pose.position.z = 1.0
+		global pose_lag, pose_iter, vel_switch
 
-		# update timestamp and publish pose 
-		pose.header.stamp = rospy.Time.now()
-		self.local_pos_pub.publish(pose)
+		if pose_lag >= 0:
+			pose_lag -= 1
+		# shift position of MAV to center of image 
+		elif pose_lag == -1:
+			vel_switch = 0
+
+		if vel_switch == 0:
+			# desired pose to be published
+			pose = PoseStamped()
+			pose.pose.position.x = 0.0
+			pose.pose.position.y = 0.0
+			pose.pose.position.z = 1.0
+
+			# update timestamp and publish pose 
+			pose.header.stamp = rospy.Time.now()
+			self.local_pos_pub.publish(pose)
+		elif vel_switch == 1:
+			# desired pose to be published
+			vel = TwistStamped()
+			vel.twist.linear.x = 0.1
+			vel.twist.linear.y = 0.0
+			vel.twist.linear.z = 0.0
+
+			# update timestamp and publish pose 
+			vel.header.stamp = rospy.Time.now()
+			self.vel_pub.publish(vel)
 
 # globals used primarily in keeping track of the state of the MAV
 current_state = State()
+
+vel_switch = 0
+pose_lag = 200
+pose_iter = 1
 
 # main function for exectuing carrier_control node
 def main():
