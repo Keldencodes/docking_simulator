@@ -35,7 +35,7 @@ class carrier_control:
 			pose_lag -= 1
 		# shift position of MAV to center of image 
 		elif pose_lag == -1:
-			vel_switch = 0
+			vel_switch = 1
 
 		if vel_switch == 0:
 			# desired pose to be published
