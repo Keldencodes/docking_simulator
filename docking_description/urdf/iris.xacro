@@ -6,9 +6,10 @@
   <xacro:property name="rotor_velocity_slowdown_sim" value="20" />
   <xacro:property name="mesh_file" value="model://meshes/iris.stl"/>
   <xacro:property name="use_collision_mesh" value="false"/>
+  <xacro:property name="use_friction" value="true"/>
   <xacro:property name="collision_mesh_file" value="model://meshes/iris.stl"/>
   <xacro:property name="mesh_scale" value="1 1 1"/>
-  <xacro:property name="mass" value="1.5" /> <!-- [kg] -->
+  <xacro:property name="mass" value="2.6" /> <!-- [kg] -->
   <xacro:property name="body_width" value="0.47" /> <!-- [m] -->
   <xacro:property name="body_height" value="0.11" /> <!-- [m] -->
   <xacro:property name="mass_rotor" value="0.005" /> <!-- [kg] -->
@@ -59,13 +60,13 @@
 
   <!-- Instantiate docking base -->
   <!-- Xacro properties -->
-  <xacro:property name="len" value="0.683" />
+  <xacro:property name="len" value="0.708" />
   <xacro:property name="cam" value="0.01" />
 
   <!-- Docker link -->
   <link name="${namespace}/docker_link">
     <visual>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0 0.025" rpy="0 0 0" />
       <geometry>
         <mesh filename="model://meshes/base_visual.dae" scale="1 1 1" />
       </geometry>
@@ -75,10 +76,18 @@
     </visual>
     <!-- Base collision, mass and inertia -->
     <collision>
-      <origin xyz="0 0 0" rpy="0 0 0" />
+      <origin xyz="0 0 0.025" rpy="0 0 0" />
       <geometry>
         <mesh filename="model://meshes/base_collision.dae" scale="1 1 1" />
       </geometry>
+      <surface>
+        <friction>
+          <ode>
+            <mu>0.0</mu>
+            <mu2>0.0</mu2>
+          </ode>
+        </friction>
+      </surface>
     </collision>
   </link>
 

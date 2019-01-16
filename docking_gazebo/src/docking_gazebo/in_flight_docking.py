@@ -14,10 +14,9 @@ import numpy as np
 
 """
 TO DO:
-1) Add column limit
-2) Add Kalman filter for CV position estimates and remove simple averaging
-3) Use real-time to index position and velocity changes
-4) Reduce motor kill distance
+1) Add Kalman filter for CV position estimates and remove simple averaging
+2) Use real-time to index position and velocity changes
+3) Reduce motor kill distance
 """
 
 class donut_docking:
@@ -159,7 +158,7 @@ class donut_docking:
 			cv2.waitKey(3)
 
 	def position_control(self):
-		global desired_pose, pose_lag, pose_iter, dock_switch, gps_carrier, gps_switch, pose_donut, cam_alt, init_loc_pose, dead_dia_irl, dead_switch 
+		global desired_pose, pose_lag, pose_iter, dock_switch, gps_carrier, gps_switch, pose_donut, cam_alt, init_loc_pose, dead_dia_irl, dead_switch, last_update, last_desired_pose 
 
 		# check that cv position estimates exist
 		if np.isfinite(self.cv_pose).any():
@@ -208,14 +207,28 @@ class donut_docking:
 			act_cont.controls[3] = 0.0
 
 			# send desired poses up to a specified distance from the base
-			if self.cv_pose_avg[2] > 0.5:
+			if self.cv_pose_avg[2] > 0.4:
 				# update timestamp and publish pose 
 				pose.header.stamp = rospy.Time.now()
 				self.local_pos_pub.publish(pose)
+				last_update = rospy.get_rostime()
+				last_desired_pose = desired_pose
 			else:
-				# update timestamp and kill motors
-				act_cont.header.stamp = rospy.Time.now()
-				self.act_cont.publish(act_cont)
+				# desired pose to be published
+				pose = PoseStamped()
+				pose.pose.position.x = last_desired_pose[0]
+				pose.pose.position.y = last_desired_pose[1]
+
+				kill_motors = rospy.get_rostime()
+				print(kill_motors - last_update)
+				if kill_motors - last_update > rospy.Duration(3.):
+					# update timestamp and kill motors
+					act_cont.header.stamp = rospy.Time.now()
+					self.act_cont.publish(act_cont)
+				else:
+					# update timestamp and publish pose
+					pose.header.stamp = rospy.Time.now()
+					self.local_pos_pub.publish(pose)
 
 		elif gps_switch == 1:
 			# desired pose to be published
@@ -251,7 +264,9 @@ pose_donut = np.array([np.nan, np.nan, np.nan])
 desired_pose = np.array([np.nan, np.nan])
 init_loc_pose = np.array([np.nan, np.nan, np.nan])
 cam_alt = np.nan
-dead_dia_irl = 0.1524
+dead_dia_irl = 0.1016
+last_update = np.nan
+last_desired_pose = np.array([np.nan, np.nan])
 
 pose_lag = 140
 gps_switch = 1

@@ -56,6 +56,14 @@
             <box size="${body_width} ${body_width} ${body_height}"/>
           </xacro:unless>
         </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.0</mu>
+              <mu2>0.0</mu2>
+            </ode>
+          </friction>
+        </surface>
       </collision>
     </link>
 
@@ -78,7 +86,15 @@
             </ode>
           </contact>
           <friction>
-            <ode/>
+            <xacro:if value="${use_friction}">
+              <ode/>
+            </xacro:if>
+            <xacro:unless value="${use_friction}">
+              <ode>
+                <mu>0.0</mu>
+                <mu2>0.0</mu2>
+              </ode>
+            </xacro:unless>
           </friction>
         </surface>
       </collision>

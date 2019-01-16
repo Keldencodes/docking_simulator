@@ -42,8 +42,7 @@
         />
   </xacro:if>
 
-
-    <!-- Instantiate gps plugin. -->
+  <!-- Instantiate gps plugin. -->
   <xacro:gps_plugin_macro
     namespace="${namespace}"
     gps_noise="true"
