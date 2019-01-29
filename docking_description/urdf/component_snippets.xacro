@@ -188,6 +188,22 @@
           </channel>
           <channel name="rotor5">
             <input_index>4</input_index>
+            <input_offset>0</input_offset>
+            <input_scaling>1000</input_scaling>
+            <zero_position_disarmed>0</zero_position_disarmed>
+            <zero_position_armed>100</zero_position_armed>
+            <joint_control_type>velocity</joint_control_type>
+          </channel>
+          <channel name="rotor6">
+            <input_index>5</input_index>
+            <input_offset>0</input_offset>
+            <input_scaling>1000</input_scaling>
+            <zero_position_disarmed>0</zero_position_disarmed>
+            <zero_position_armed>100</zero_position_armed>
+            <joint_control_type>velocity</joint_control_type>
+          </channel>
+          <channel name="rotor7">
+            <input_index>6</input_index>
             <input_offset>1</input_offset>
             <input_scaling>324.6</input_scaling>
             <zero_position_disarmed>0</zero_position_disarmed>
@@ -204,8 +220,8 @@
             </joint_control_pid>
             <joint_name>zephyr_delta_wing::propeller_joint</joint_name>
           </channel>
-          <channel name="rotor6">
-            <input_index>5</input_index>
+          <channel name="rotor8">
+            <input_index>7</input_index>
             <input_offset>0</input_offset>
             <!-- joint limits [-0.524, 0.524] -->
             <input_scaling>0.524</input_scaling>
@@ -223,8 +239,8 @@
               <cmdMin>-20</cmdMin>
             </joint_control_pid>
           </channel>
-          <channel name="rotor7">
-            <input_index>6</input_index>
+          <channel name="rotor9">
+            <input_index>8</input_index>
             <input_offset>0</input_offset>
             <!-- joint limits [-0.524, 0.524] -->
             <input_scaling>0.524</input_scaling>
@@ -242,8 +258,8 @@
               <cmdMin>-20</cmdMin>
             </joint_control_pid>
           </channel>
-          <channel name="rotor8">
-            <input_index>7</input_index>
+          <channel name="rotor10">
+            <input_index>9</input_index>
             <input_offset>0</input_offset>
             <input_scaling>0.524</input_scaling>
             <zero_position_disarmed>0</zero_position_disarmed>

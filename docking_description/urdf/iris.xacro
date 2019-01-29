@@ -4,20 +4,19 @@
   <!-- Properties -->
   <xacro:property name="namespace" value="iris" />
   <xacro:property name="rotor_velocity_slowdown_sim" value="20" />
-  <xacro:property name="mesh_file" value="model://meshes/iris.stl"/>
+  <xacro:property name="mesh_file" value="model://meshes/carrier.dae"/>
   <xacro:property name="use_collision_mesh" value="false"/>
   <xacro:property name="use_friction" value="true"/>
-  <xacro:property name="collision_mesh_file" value="model://meshes/iris.stl"/>
+  <xacro:property name="collision_mesh_file" value="model://meshes/carrier.dae"/>
   <xacro:property name="mesh_scale" value="1 1 1"/>
   <xacro:property name="mass" value="2.6" /> <!-- [kg] -->
-  <xacro:property name="body_width" value="0.47" /> <!-- [m] -->
-  <xacro:property name="body_height" value="0.11" /> <!-- [m] -->
+  <xacro:property name="body_width" value="0.75" /> <!-- [m] -->
+  <xacro:property name="body_height" value="0.1" /> <!-- [m] -->
   <xacro:property name="mass_rotor" value="0.005" /> <!-- [kg] -->
-  <xacro:property name="arm_length_front_x" value="0.13" /> <!-- [m] -->
-  <xacro:property name="arm_length_back_x" value="0.13" /> <!-- [m] -->
-  <xacro:property name="arm_length_front_y" value="0.22" /> <!-- [m] -->
-  <xacro:property name="arm_length_back_y" value="0.2" /> <!-- [m] -->
-  <xacro:property name="rotor_offset_top" value="0.023" /> <!-- [m] -->
+  <xacro:property name="arm_length_y_rl" value="0.41499663" /> <!-- [m] -->
+  <xacro:property name="arm_length_y_fb" value="0.20749832" /> <!-- [m] -->
+  <xacro:property name="arm_length_x" value="0.35939762" /> <!-- [m] -->
+  <xacro:property name="rotor_offset_top" value="0.05" /> <!-- [m] -->
   <xacro:property name="radius_rotor" value="0.128" /> <!-- [m] -->
   <xacro:property name="motor_constant" value="8.54858e-06" /> <!-- [kg.m/s^2] -->
   <xacro:property name="moment_constant" value="0.06" /> <!-- [m] -->
@@ -60,13 +59,13 @@
 
   <!-- Instantiate docking base -->
   <!-- Xacro properties -->
-  <xacro:property name="len" value="0.708" />
+  <xacro:property name="len" value="0.695" />
   <xacro:property name="cam" value="0.01" />
 
   <!-- Docker link -->
   <link name="${namespace}/docker_link">
     <visual>
-      <origin xyz="0 0 0.025" rpy="0 0 0" />
+      <origin xyz="0 0 0.012" rpy="0 0 0" />
       <geometry>
         <mesh filename="model://meshes/base_visual.dae" scale="1 1 1" />
       </geometry>
@@ -76,7 +75,7 @@
     </visual>
     <!-- Base collision, mass and inertia -->
     <collision>
-      <origin xyz="0 0 0.025" rpy="0 0 0" />
+      <origin xyz="0 0 0.012" rpy="0 0 0" />
       <geometry>
         <mesh filename="model://meshes/base_collision.dae" scale="1 1 1" />
       </geometry>
@@ -177,8 +176,8 @@
   <!-- Instantiate rotors -->
   <xacro:vertical_rotor
     robot_namespace="${namespace}"
-    suffix="front_right"
-    direction="ccw"
+    suffix="far_right"
+    direction="cw"
     motor_constant="${motor_constant}"
     moment_constant="${moment_constant}"
     parent="${namespace}/base_link"
@@ -191,14 +190,14 @@
     rotor_drag_coefficient="${rotor_drag_coefficient}"
     rolling_moment_coefficient="${rolling_moment_coefficient}"
     mesh="propeller"
-    color="Blue">
-    <origin xyz="${arm_length_front_x} -${arm_length_front_y} ${rotor_offset_top}" rpy="0 0 0" />
+    color="DarkGrey">
+    <origin xyz="0 -${arm_length_y_rl} ${rotor_offset_top}" rpy="0 0 0" />
     <xacro:insert_block name="rotor_inertia" />
   </xacro:vertical_rotor>
 
   <xacro:vertical_rotor
     robot_namespace="${namespace}"
-    suffix="back_left"
+    suffix="far_left"
     direction="ccw"
     motor_constant="${motor_constant}"
     moment_constant="${moment_constant}"
@@ -213,7 +212,7 @@
     rolling_moment_coefficient="${rolling_moment_coefficient}"
     mesh="propeller"
     color="DarkGrey">
-    <origin xyz="-${arm_length_back_x} ${arm_length_back_y} ${rotor_offset_top}" rpy="0 0 0" />
+    <origin xyz="0 ${arm_length_y_rl} ${rotor_offset_top}" rpy="0 0 0" />
     <xacro:insert_block name="rotor_inertia" />
   </xacro:vertical_rotor>
 
@@ -233,13 +232,13 @@
     rolling_moment_coefficient="${rolling_moment_coefficient}"
     mesh="propeller"
     color="Blue">
-    <origin xyz="${arm_length_front_x} ${arm_length_front_y} ${rotor_offset_top}" rpy="0 0 0" />
+    <origin xyz="${arm_length_x} ${arm_length_y_fb} ${rotor_offset_top}" rpy="0 0 0" />
     <xacro:insert_block name="rotor_inertia" />
   </xacro:vertical_rotor>
 
   <xacro:vertical_rotor robot_namespace="${namespace}"
     suffix="back_right"
-    direction="cw"
+    direction="ccw"
     motor_constant="${motor_constant}"
     moment_constant="${moment_constant}"
     parent="${namespace}/base_link"
@@ -253,7 +252,47 @@
     rolling_moment_coefficient="${rolling_moment_coefficient}"
     mesh="propeller"
     color="DarkGrey">
-    <origin xyz="-${arm_length_back_x} -${arm_length_back_y} ${rotor_offset_top}" rpy="0 0 0" />
+    <origin xyz="-${arm_length_x} -${arm_length_y_fb} ${rotor_offset_top}" rpy="0 0 0" />
+    <xacro:insert_block name="rotor_inertia" />
+  </xacro:vertical_rotor>
+
+  <xacro:vertical_rotor robot_namespace="${namespace}"
+    suffix="front_right"
+    direction="ccw"
+    motor_constant="${motor_constant}"
+    moment_constant="${moment_constant}"
+    parent="${namespace}/base_link"
+    mass_rotor="${mass_rotor}"
+    radius_rotor="${radius_rotor}"
+    time_constant_up="${time_constant_up}"
+    time_constant_down="${time_constant_down}"
+    max_rot_velocity="${max_rot_velocity}"
+    motor_number="4"
+    rotor_drag_coefficient="${rotor_drag_coefficient}"
+    rolling_moment_coefficient="${rolling_moment_coefficient}"
+    mesh="propeller"
+    color="Blue">
+    <origin xyz="${arm_length_x} -${arm_length_y_fb} ${rotor_offset_top}" rpy="0 0 0" />
+    <xacro:insert_block name="rotor_inertia" />
+  </xacro:vertical_rotor>
+
+  <xacro:vertical_rotor robot_namespace="${namespace}"
+    suffix="back_left"
+    direction="cw"
+    motor_constant="${motor_constant}"
+    moment_constant="${moment_constant}"
+    parent="${namespace}/base_link"
+    mass_rotor="${mass_rotor}"
+    radius_rotor="${radius_rotor}"
+    time_constant_up="${time_constant_up}"
+    time_constant_down="${time_constant_down}"
+    max_rot_velocity="${max_rot_velocity}"
+    motor_number="5"
+    rotor_drag_coefficient="${rotor_drag_coefficient}"
+    rolling_moment_coefficient="${rolling_moment_coefficient}"
+    mesh="propeller"
+    color="DarkGrey">
+    <origin xyz="-${arm_length_x} ${arm_length_y_fb} ${rotor_offset_top}" rpy="0 0 0" />
     <xacro:insert_block name="rotor_inertia" />
   </xacro:vertical_rotor>
 

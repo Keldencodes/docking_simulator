@@ -220,7 +220,6 @@ class donut_docking:
 				pose.pose.position.y = last_desired_pose[1]
 
 				kill_motors = rospy.get_rostime()
-				print(kill_motors - last_update)
 				if kill_motors - last_update > rospy.Duration(3.):
 					# update timestamp and kill motors
 					act_cont.header.stamp = rospy.Time.now()

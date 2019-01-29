@@ -34,9 +34,9 @@
         <arg name="Y" default="0"/>
         <!-- Vehicle parameters -->
         <arg name="vehicle" default="donut"/>
-        <arg name="airframe" default="iris"/>
+        <arg name="airframe" default="solo"/>
         <arg name="ID" default="1"/>
-        <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg airframe)_$(arg ID)"/>
+        <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg airframe)"/>
         <arg name="mavlink_udp_port" value="14560"/>
 
         <!-- PX4 configs -->
@@ -82,9 +82,9 @@
         <arg name="Y" default="0"/>
         <!-- Vehicle parameters -->
         <arg name="vehicle" default="iris"/>
-        <arg name="airframe" default="iris"/>
+        <arg name="airframe" default="typhoon_h480"/>
         <arg name="ID" default="2"/>
-        <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg airframe)_$(arg ID)"/>
+        <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg airframe)"/>
         <arg name="mavlink_udp_port" value="14562"/>
 
         <!-- PX4 configs -->
