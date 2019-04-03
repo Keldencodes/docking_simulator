@@ -158,7 +158,7 @@ class donut_docking:
 			cv2.waitKey(3)
 
 	def position_control(self):
-		global desired_pose, pose_lag, pose_iter, dock_switch, gps_carrier, gps_switch, pose_donut, cam_alt, init_loc_pose, dead_dia_irl, dead_switch, last_update, last_desired_pose 
+		global desired_pose, pose_lag, gps_carrier, gps_switch, pose_donut, cam_alt, init_loc_pose, dead_dia_irl, dead_switch, last_update, last_desired_pose 
 
 		# check that cv position estimates exist
 		if np.isfinite(self.cv_pose).any():
@@ -207,7 +207,7 @@ class donut_docking:
 			act_cont.controls[3] = 0.0
 
 			# send desired poses up to a specified distance from the base
-			if self.cv_pose_avg[2] > 0.4:
+			if self.cv_pose_avg[2] > 0.5:
 				# update timestamp and publish pose 
 				pose.header.stamp = rospy.Time.now()
 				self.local_pos_pub.publish(pose)
@@ -241,7 +241,7 @@ class donut_docking:
 			self.gps_donut_pub.publish(gps_donut)
 
 	def mocap_feedback(self):
-		global pose_lag, pose_iter, init_loc_pose, cam_alt
+		global pose_lag, init_loc_pose, cam_alt
 
 		# publish cv estimates to motion capture node
 		if pose_lag < 50:
@@ -259,13 +259,15 @@ class donut_docking:
 offb_set_mode = SetMode
 current_state = State()
 gps_carrier = NavSatFix()
-pose_donut = np.array([np.nan, np.nan, np.nan])
+
+
 desired_pose = np.array([np.nan, np.nan])
+pose_donut = np.array([np.nan, np.nan, np.nan])
 init_loc_pose = np.array([np.nan, np.nan, np.nan])
-cam_alt = np.nan
-dead_dia_irl = 0.1016
-last_update = np.nan
 last_desired_pose = np.array([np.nan, np.nan])
+last_update = np.nan
+dead_dia_irl = 0.1016
+cam_alt = np.nan
 
 pose_lag = 140
 gps_switch = 1
