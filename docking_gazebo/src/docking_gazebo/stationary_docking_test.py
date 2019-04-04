@@ -16,7 +16,8 @@ class stationary_docking(Common):
 		self.set_arm(True)
 
 		# start position publishing thread and send takeoff setpoint
-		self.position_setpoint(0, 0, 6)
+		self.position_setpoint(0, 0, self.alt)
+		self.pos_reached_thread.start()
 		self.pos_pub_thread.start()
 
 		# delay switch to offboard mode to ensure sufficient initial setpoint stream
@@ -25,10 +26,17 @@ class stationary_docking(Common):
 		# begin filtering vision data
 		self.filter_thread.start()
 
-		# change the mav position
-		self.position_setpoint(-1, 0, 4)
-		self.position_setpoint(0, -1, 5)
-		self.position_setpoint(0, 0, 6)
+		# change mav position
+		self.position_setpoint(-1, 0, 5)
+		self.position_setpoint(0, -1, 3)
+		self.position_setpoint(0, 0, self.alt)
+
+		# center the mav on the image
+		self.center_thread.start()
+
+		# # begin motion capture feedback and dock mav
+		# self.mocap_thread.start()
+		# self.docking_thread.start()
 
 def main():
 	# initialize ros node 

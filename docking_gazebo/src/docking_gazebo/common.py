@@ -12,39 +12,76 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 from queue import Queue
+import time
 
 class Common(object):
 
 	def __init__(self):
+		self.bridge = CvBridge()
 		self.pos = PoseStamped()
+		self.state = State()
+		self.alt = 4.0
+		self.led_raw = np.array([np.nan, np.nan, np.nan])
+		self.led = np.array([np.nan, np.nan, np.nan])
+		self.current_pose = np.array([np.nan, np.nan, np.nan])
+		self.cv_pose = np.array([np.nan, np.nan, np.nan])
 
 		self.local_pos_pub = rospy.Publisher(
 			'/donut/mavros/setpoint_position/local', PoseStamped, queue_size=20)
 
-		self.pos_pub_thread = Thread(target=self.position_pub)
-
+		self.local_pos_sub = rospy.Subscriber(
+			'/donut/mavros/local_position/pose', PoseStamped, self.pose_cb)
 		self.state_sub = rospy.Subscriber('/donut/mavros/state', State, self.state_cb)
-		self.state = State()
-
-		self.arming_client = rospy.ServiceProxy('/donut/mavros/cmd/arming', CommandBool)
-
-		self.set_mode_client = rospy.ServiceProxy('/donut/mavros/set_mode', SetMode) 
-
-		self.bridge = CvBridge()
 		self.image_sub = rospy.Subscriber(
 			'/base/camera1/image_raw', Image, self.detect_led)
-		self.led_raw = np.array([np.nan, np.nan, np.nan])
-		self.led_event = Event()
-		self.led = np.array([np.nan, np.nan, np.nan])
+
+		self.arming_client = rospy.ServiceProxy('/donut/mavros/cmd/arming', CommandBool)
+		self.set_mode_client = rospy.ServiceProxy('/donut/mavros/set_mode', SetMode) 
+
+		self.pos_desired_q = Queue() 
+
+		self.pos_pub_thread = Thread(target=self.position_pub)
+		self.pos_reached_thread = Thread(target=self.position_reached)
+		self.center_thread = Thread(target=self.center_mav)
 		self.filter_thread = Thread(target=self.call_filter)
-		self.cv_pose = np.array([np.nan, np.nan, np.nan])
+
+		self.center_event = Event()
+		self.led_event = Event()
 		self.filter_event = Event()
 
 	def state_cb(self, data):
 		self.state = data
 
+	def pose_cb(self, data):
+		self.current_pose[0] = data.pose.position.x
+		self.current_pose[1] = data.pose.position.y
+		self.current_pose[2] = data.pose.position.z
+
+	def position_reached(self, offset=0.3):
+		while not self.pos_desired_q.empty():
+			desired_pose = self.pos_desired_q.get()
+			self.pos.pose.position.x = desired_pose[0]
+			self.pos.pose.position.y = desired_pose[1]
+			self.pos.pose.position.z = desired_pose[2]
+
+			reached = False
+			while not reached:
+				if np.linalg.norm(desired_pose - self.current_pose) < offset:
+					time.sleep(5)
+					reached = True
+		else:
+			self.center_event.set()
+
+	def center_mav(self):
+		if self.center_event.wait():
+			print("CENTERING")
+			cv_shift = self.current_pose - self.cv_pose
+			self.pos.pose.position.x = cv_shift[0]
+			self.pos.pose.position.y = cv_shift[1]
+			self.pos.pose.position.z = self.alt
+
 	def position_setpoint(self, x, y, z):
-		
+		self.pos_desired_q.put(np.array([x, y, z]))
 
 	def position_pub(self):
 		rate = rospy.Rate(8)
