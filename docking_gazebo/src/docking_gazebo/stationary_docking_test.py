@@ -15,8 +15,10 @@ class stationary_docking(Common):
 		# arm the MAV
 		self.set_arm(True)
 
-		# start position publishing thread and send takeoff setpoint
+		# send takeoff setpoint
 		self.position_setpoint(0, 0, self.alt)
+
+		# start threads to publish positions and check that positions are being reached
 		self.pos_reached_thread.start()
 		self.pos_pub_thread.start()
 
@@ -26,17 +28,15 @@ class stationary_docking(Common):
 		# begin filtering vision data
 		self.filter_thread.start()
 
-		# change mav position
-		self.position_setpoint(-1, 0, 5)
-		self.position_setpoint(0, -1, 3)
-		self.position_setpoint(0, 0, self.alt)
-
 		# center the mav on the image
 		self.center_thread.start()
 
-		# # begin motion capture feedback and dock mav
-		# self.mocap_thread.start()
-		# self.docking_thread.start()
+		# begin motion capture feedback
+		self.mocap_thread.start()
+
+		# dock 
+		self.dock_init_thread.start()
+		self.dock_final_thread.start()
 
 def main():
 	# initialize ros node 

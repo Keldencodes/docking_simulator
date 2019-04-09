@@ -17,17 +17,25 @@ import time
 class Common(object):
 
 	def __init__(self):
+		self.ros_rate = 40
 		self.bridge = CvBridge()
 		self.pos = PoseStamped()
+		self.mocap_pos = PoseStamped()
 		self.state = State()
 		self.alt = 4.0
+		self.dead_dia_irl = 0.1016
+		self.dead_switch = 0
+		self.cam_alt = np.nan
+		self.cv_shift = np.array([np.nan, np.nan, np.nan])
 		self.led_raw = np.array([np.nan, np.nan, np.nan])
 		self.led = np.array([np.nan, np.nan, np.nan])
 		self.current_pose = np.array([np.nan, np.nan, np.nan])
 		self.cv_pose = np.array([np.nan, np.nan, np.nan])
 
 		self.local_pos_pub = rospy.Publisher(
-			'/donut/mavros/setpoint_position/local', PoseStamped, queue_size=20)
+			'/donut/mavros/setpoint_position/local', PoseStamped, queue_size=1)
+		self.mocap_pos_pub = rospy.Publisher(
+			'/donut/mavros/mocap/pose', PoseStamped, queue_size=1)
 
 		self.local_pos_sub = rospy.Subscriber(
 			'/donut/mavros/local_position/pose', PoseStamped, self.pose_cb)
@@ -42,53 +50,67 @@ class Common(object):
 
 		self.pos_pub_thread = Thread(target=self.position_pub)
 		self.pos_reached_thread = Thread(target=self.position_reached)
-		self.center_thread = Thread(target=self.center_mav)
 		self.filter_thread = Thread(target=self.call_filter)
+		self.center_thread = Thread(target=self.center_mav) 
+		self.mocap_thread = Thread(target=self.mocap_feedback)
+		self.dock_init_thread = Thread(target=self.dock_initial)
+		self.dock_final_thread = Thread(target=self.dock_final)
 
-		self.center_event = Event()
 		self.led_event = Event()
 		self.filter_event = Event()
+		self.center_event = Event()
+		self.reached_event = Event()
+		self.docking_event = Event()
+		self.mocap_event = Event()
+		self.final_event = Event()
+		self.lost_event = Event()
+
 
 	def state_cb(self, data):
 		self.state = data
+
 
 	def pose_cb(self, data):
 		self.current_pose[0] = data.pose.position.x
 		self.current_pose[1] = data.pose.position.y
 		self.current_pose[2] = data.pose.position.z
 
-	def position_reached(self, offset=0.3):
-		while not self.pos_desired_q.empty():
-			desired_pose = self.pos_desired_q.get()
-			self.pos.pose.position.x = desired_pose[0]
-			self.pos.pose.position.y = desired_pose[1]
-			self.pos.pose.position.z = desired_pose[2]
 
-			reached = False
-			while not reached:
-				if np.linalg.norm(desired_pose - self.current_pose) < offset:
-					time.sleep(5)
-					reached = True
-		else:
-			self.center_event.set()
+	def position_reached(self, offset=1.0):
+		rate = rospy.Rate(self.ros_rate)
+		while not rospy.is_shutdown():
+			while not self.pos_desired_q.empty():
+				self.reached_event.clear()
 
-	def center_mav(self):
-		if self.center_event.wait():
-			print("CENTERING")
-			cv_shift = self.current_pose - self.cv_pose
-			self.pos.pose.position.x = cv_shift[0]
-			self.pos.pose.position.y = cv_shift[1]
-			self.pos.pose.position.z = self.alt
+				desired_pose = self.pos_desired_q.get()
+				self.pos.pose.position.x = desired_pose[0]
+				self.pos.pose.position.y = desired_pose[1]
+				self.pos.pose.position.z = desired_pose[2]
+
+				reached = False
+				while not reached:
+					if np.linalg.norm(desired_pose - self.current_pose) < offset:
+						time.sleep(8)
+						self.reached_event.set()
+						reached = True
+			else:
+				self.center_event.set()
+
+			rate.sleep()
+
 
 	def position_setpoint(self, x, y, z):
 		self.pos_desired_q.put(np.array([x, y, z]))
 
-	def position_pub(self):
-		rate = rospy.Rate(8)
 
+	def position_pub(self):
+		rate = rospy.Rate(self.ros_rate)
 		while not rospy.is_shutdown():
 			self.pos.header.stamp = rospy.Time.now()
 			self.local_pos_pub.publish(self.pos)
+
+			rate.sleep()
+
 
 	def set_arm(self, arm):
 		if arm and not self.state.armed:
@@ -98,11 +120,13 @@ class Common(object):
 		elif not arm:
 			self.arming_client(False)
 			rospy.loginfo("Vehicle armed: %r" % arm)
+
 			
 	def set_offboard(self):
 		if self.state.mode != "OFFBOARD":
 			self.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
 			rospy.loginfo("Current mode: %s" % "OFFBOARD")	
+
 
 	def reject_outlier(self, current, previous, offset):
 		measured_offset = abs(current - previous)
@@ -111,13 +135,13 @@ class Common(object):
 		else:
 			return previous
 
-	def filter_display(self):
-		rate = rospy.Rate(8)
 
+	def filter_display(self):
+		rate = rospy.Rate(self.ros_rate)
 		i = 0
 		while not rospy.is_shutdown():
 			k_gain = np.nan
-			e_mea = 10.0                              # measurement error
+			e_mea = 0.0001                            # measurement error
 			e_pro = 1e-5 		   			          # process covariance
 			e_est_init = np.array([0.2, 0.2, 1])      # initial estimation error
 			
@@ -141,11 +165,18 @@ class Common(object):
 
 			self.led = led_kalman
 
-			self.filter_event.set()
+			if not self.final_event.is_set():
+				self.filter_event.set()
+			else:
+				self.filter_event.clear()
+
+			rate.sleep()
+
 
 	def call_filter(self):
 		if self.led_event.wait():
 			Timer(2.0, self.filter_display).start()
+
 
 	def detect_led(self, data):
 		try:
@@ -166,18 +197,20 @@ class Common(object):
 		# Combine the above two images
 		red_hue_image = cv2.bitwise_or(lower_red_hue_range, upper_red_hue_range)
 		red_hue_image = cv2.GaussianBlur(red_hue_image, (9, 9), 2, 2)
-	
+
 		# detect contours
 		_, contours, _ = cv2.findContours(
 			red_hue_image,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 
 		# check that two contours exist (outside and inside eges of LED)
 		if len(contours) < 2:
+			self.lost_event.set()
 			if not self.led_event.is_set():
 				self.led_raw = np.array([np.nan, np.nan, np.nan])
 		else:
 			# signal that vision estimates are being collected
 			self.led_event.set()
+			self.lost_event.clear()
 
 			# extract the outer and inner edges of the LED
 			outer_cnt = contours[0]
@@ -211,7 +244,7 @@ class Common(object):
 				diff_y = self.led[1] - img_center_y
 				fov = np.radians(80)
 				foc_len = (img_width/2)/(np.tan(fov/2))
-		
+
 				# compute position of MAV from above values and known LED diameter
 				led_dia_irl = 0.2413
 				unit_dist = led_dia_irl/self.led[2]
@@ -226,8 +259,7 @@ class Common(object):
 					(np.uint16(self.led[0]),np.uint16(self.led[1])), 2, (255,0,0), 3)
 
 				# calculate dead zone diameter to display
-				dead_dia_irl = 0.1016
-				dead_led_ratio = dead_dia_irl/led_dia_irl
+				dead_led_ratio = self.dead_dia_irl/led_dia_irl
 				dead_dia = dead_led_ratio*self.led[2]
 
 				# display dead zone
@@ -237,3 +269,72 @@ class Common(object):
 				# display image
 				cv2.imshow("Image Stream", img)
 				cv2.waitKey(3)
+
+
+	def center_mav(self):
+		if self.center_event.wait():
+			self.cv_shift = self.current_pose - self.cv_pose
+			self.position_setpoint(self.cv_shift[0], self.cv_shift[1], self.alt)
+
+			time.sleep(2)
+			self.docking_event.set()
+
+
+	def mocap_feedback(self):
+		if self.docking_event.wait() and self.reached_event.wait():
+			self.mocap_event.set()
+
+			init_pose = self.current_pose - self.cv_pose
+			self.cam_alt = self.alt - self.cv_pose[2]
+
+			rate = rospy.Rate(self.ros_rate)
+			while not rospy.is_shutdown():
+				self.mocap_pos.pose.position.x = self.cv_pose[0] + init_pose[0]
+				self.mocap_pos.pose.position.y = self.cv_pose[1] + init_pose[1]
+				self.mocap_pos.pose.position.z = self.cv_pose[2] + self.cam_alt
+
+				self.mocap_pos.header.stamp = rospy.Time.now()
+				self.mocap_pos_pub.publish(self.mocap_pos)
+
+				rate.sleep()
+
+
+	def dock_initial(self):
+		if self.mocap_event.wait():
+			rate = rospy.Rate(self.ros_rate)
+			while not rospy.is_shutdown() and not self.final_event.is_set():
+				if self.reached_event.is_set():
+					off_center = 2*np.sqrt(self.cv_pose[0]**2 + self.cv_pose[1]**2)
+					if off_center > self.dead_dia_irl and self.dead_switch == 0:
+						self.cv_shift = self.cv_shift - self.cv_pose
+						self.pos.pose.position.x = self.cv_shift[0]
+						self.pos.pose.position.y = self.cv_shift[1]
+						self.pos.pose.position.z = 0.0
+						self.dead_switch = 1
+					elif off_center <= self.dead_dia_irl:
+						self.dead_switch = 0
+
+				rate.sleep()
+
+
+	def dock_final(self):
+		if self.mocap_event.wait():
+			rate = rospy.Rate(self.ros_rate)
+			while not rospy.is_shutdown() and not self.final_event.is_set():
+				if self.reached_event.is_set():
+					if self.cv_pose[2] >= 0.3 and self.lost_event.is_set():
+						self.position_setpoint(self.cv_shift[0], 
+							self.cv_shift[1], self.alt)
+						time.sleep(2)
+						self.dead_switch = 0
+					elif self.cv_pose[2] < 0.3 and self.dead_switch == 1:
+						self.position_setpoint(self.cv_shift[0], 
+							self.cv_shift[1], self.alt)
+						time.sleep(2)
+						self.dead_switch = 0
+					elif self.cv_pose[2] < 0.3 and self.dead_switch == 0:
+						self.final_event.set()
+						time.sleep(2)
+						self.set_arm(False)
+
+				rate.sleep()
