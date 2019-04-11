@@ -6,9 +6,8 @@ import rospy
 import cv2
 from geometry_msgs.msg import PoseStamped
 from mavros_msgs.msg import State
-from threading import Thread, Event, Timer, Condition
+from threading import Thread, Event, Timer
 from mavros_msgs.srv import CommandBool, SetMode
-from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 from queue import Queue
@@ -17,34 +16,39 @@ import time
 class Common(object):
 
 	def __init__(self):
-		self.ros_rate = 40
 		self.bridge = CvBridge()
 		self.pos = PoseStamped()
 		self.mocap_pos = PoseStamped()
 		self.state = State()
+
+		self.gps = False
+		self.ros_rate = 40
 		self.alt = 4.0
 		self.dead_dia_irl = 0.1016
 		self.dead_switch = 0
+
 		self.cam_alt = np.nan
 		self.cv_shift = np.array([np.nan, np.nan, np.nan])
 		self.led_raw = np.array([np.nan, np.nan, np.nan])
 		self.led = np.array([np.nan, np.nan, np.nan])
 		self.current_pose = np.array([np.nan, np.nan, np.nan])
 		self.cv_pose = np.array([np.nan, np.nan, np.nan])
+		self.carrier_pose = np.zeros(3)
 
-		self.local_pos_pub = rospy.Publisher(
+		self.local_pos_pub_docker = rospy.Publisher(
 			'/donut/mavros/setpoint_position/local', PoseStamped, queue_size=1)
 		self.mocap_pos_pub = rospy.Publisher(
 			'/donut/mavros/mocap/pose', PoseStamped, queue_size=1)
-
+		
 		self.local_pos_sub = rospy.Subscriber(
 			'/donut/mavros/local_position/pose', PoseStamped, self.pose_cb)
-		self.state_sub = rospy.Subscriber('/donut/mavros/state', State, self.state_cb)
-		self.image_sub = rospy.Subscriber(
-			'/base/camera1/image_raw', Image, self.detect_led)
+		self.state_docker_sub = rospy.Subscriber(
+			'/donut/mavros/state', State, self.state_docker_cb)
 
-		self.arming_client = rospy.ServiceProxy('/donut/mavros/cmd/arming', CommandBool)
-		self.set_mode_client = rospy.ServiceProxy('/donut/mavros/set_mode', SetMode) 
+		self.arming_client_docker = rospy.ServiceProxy(
+			'/donut/mavros/cmd/arming', CommandBool)
+		self.set_mode_client_docker = rospy.ServiceProxy(
+			'/donut/mavros/set_mode', SetMode)
 
 		self.pos_desired_q = Queue() 
 
@@ -66,7 +70,7 @@ class Common(object):
 		self.lost_event = Event()
 
 
-	def state_cb(self, data):
+	def state_docker_cb(self, data):
 		self.state = data
 
 
@@ -76,56 +80,80 @@ class Common(object):
 		self.current_pose[2] = data.pose.position.z
 
 
-	def position_reached(self, offset=1.0):
+	def position_reached(self, offset=1.0, gps_offset=2.0):
 		rate = rospy.Rate(self.ros_rate)
 		while not rospy.is_shutdown():
 			while not self.pos_desired_q.empty():
 				self.reached_event.clear()
-
 				desired_pose = self.pos_desired_q.get()
-				self.pos.pose.position.x = desired_pose[0]
-				self.pos.pose.position.y = desired_pose[1]
-				self.pos.pose.position.z = desired_pose[2]
+				self.gps = desired_pose[3]
 
-				reached = False
-				while not reached:
-					if np.linalg.norm(desired_pose - self.current_pose) < offset:
-						time.sleep(8)
-						self.reached_event.set()
-						reached = True
+				if not self.gps:
+					self.pos.pose.position.x = desired_pose[0]
+					self.pos.pose.position.y = desired_pose[1]
+					self.pos.pose.position.z = desired_pose[2]
+
+					reached = False
+					while not reached:
+						if np.linalg.norm(desired_pose[:3] - self.current_pose) < offset:
+							time.sleep(8)
+							self.reached_event.set()
+							reached = True
+				elif self.gps:
+					self.gps_pos.latitude = desired_pose[0]
+					self.gps_pos.longitude = desired_pose[1]
+					self.gps_pos.altitude = desired_pose[2]
+
+					gps_dif = np.zeros(3)
+					reached = False
+					while not reached:
+						gps_dif[0] = 111111.0*abs(
+							desired_pose[0] - self.gps_docker.latitude)
+						gps_dif[1] = 111111.0*abs(
+							desired_pose[1] - self.gps_docker.longitude)
+						gps_dif[2] = abs(desired_pose[2] - self.gps_docker.altitude)
+						if np.all(gps_dif < gps_offset):
+							time.sleep(10)
+							self.reached_event.set()
+							reached = True
+
 			else:
 				self.center_event.set()
 
 			rate.sleep()
 
 
-	def position_setpoint(self, x, y, z):
-		self.pos_desired_q.put(np.array([x, y, z]))
+	def position_setpoint(self, x, y, z, gps=False):
+		self.pos_desired_q.put(np.array([x, y, z, gps]))
 
 
 	def position_pub(self):
 		rate = rospy.Rate(self.ros_rate)
 		while not rospy.is_shutdown():
-			self.pos.header.stamp = rospy.Time.now()
-			self.local_pos_pub.publish(self.pos)
+			if not self.gps:
+				self.pos.header.stamp = rospy.Time.now()
+				self.local_pos_pub_docker.publish(self.pos)
+			elif self.gps:
+				self.gps_pos.header.stamp = rospy.Time.now()
+				self.gps_docker_pub.publish(self.gps_pos)
 
 			rate.sleep()
 
 
 	def set_arm(self, arm):
 		if arm and not self.state.armed:
-			self.arming_client(True)
-			rospy.loginfo("Vehicle armed: %r" % arm)
+			self.arming_client_docker(True)
+			rospy.loginfo("Docker armed: %r" % arm)
 
 		elif not arm:
-			self.arming_client(False)
-			rospy.loginfo("Vehicle armed: %r" % arm)
+			self.arming_client_docker(False)
+			rospy.loginfo("Docker armed: %r" % arm)
 
 			
 	def set_offboard(self):
 		if self.state.mode != "OFFBOARD":
-			self.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
-			rospy.loginfo("Current mode: %s" % "OFFBOARD")	
+			self.set_mode_client_docker(base_mode=0, custom_mode="OFFBOARD")
+			rospy.loginfo("Docker mode: %s" % "OFFBOARD")	
 
 
 	def reject_outlier(self, current, previous, offset):
@@ -274,7 +302,8 @@ class Common(object):
 	def center_mav(self):
 		if self.center_event.wait():
 			self.cv_shift = self.current_pose - self.cv_pose
-			self.position_setpoint(self.cv_shift[0], self.cv_shift[1], self.alt)
+			self.position_setpoint(self.cv_shift[0], self.cv_shift[1], 
+				self.alt + self.carrier_pose[2])
 
 			time.sleep(2)
 			self.docking_event.set()
@@ -285,7 +314,7 @@ class Common(object):
 			self.mocap_event.set()
 
 			init_pose = self.current_pose - self.cv_pose
-			self.cam_alt = self.alt - self.cv_pose[2]
+			self.cam_alt = self.alt - self.cv_pose[2] + self.carrier_pose[2]
 
 			rate = rospy.Rate(self.ros_rate)
 			while not rospy.is_shutdown():
@@ -324,12 +353,12 @@ class Common(object):
 				if self.reached_event.is_set():
 					if self.cv_pose[2] >= 0.3 and self.lost_event.is_set():
 						self.position_setpoint(self.cv_shift[0], 
-							self.cv_shift[1], self.alt)
+							self.cv_shift[1], self.alt + self.carrier_pose[2])
 						time.sleep(2)
 						self.dead_switch = 0
 					elif self.cv_pose[2] < 0.3 and self.dead_switch == 1:
 						self.position_setpoint(self.cv_shift[0], 
-							self.cv_shift[1], self.alt)
+							self.cv_shift[1], self.alt + self.carrier_pose[2])
 						time.sleep(2)
 						self.dead_switch = 0
 					elif self.cv_pose[2] < 0.3 and self.dead_switch == 0:

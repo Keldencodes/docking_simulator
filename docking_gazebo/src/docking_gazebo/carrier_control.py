@@ -1,113 +1,77 @@
-#!usr/bin/env python
+#!usr/bin/env python2
 
 import roslib
 roslib.load_manifest('docking_gazebo')
+from common import Common
+from threading import Thread, Timer
 import rospy
-import mavros
+import time
+from geometry_msgs.msg import PoseStamped
 from mavros_msgs.msg import State
 from mavros_msgs.srv import CommandBool, SetMode
-from geometry_msgs.msg import PoseStamped, TwistStamped
-import numpy as np
 
 
-class carrier_control:
+class carrier_control(Common):
 
 	def __init__(self):
-		# mav position/actuator control setpoint publisher 
-		self.local_pos_pub = rospy.Publisher('/iris/mavros/setpoint_position/local', PoseStamped, queue_size=20)
-		self.vel_pub = rospy.Publisher('/iris/mavros/setpoint_velocity/cmd_vel', TwistStamped, queue_size=20)
-	
-		# subscriber for the current state
-		self.state_sub = rospy.Subscriber('/iris/mavros/state', State, self.state_cb)
-		# services for arming and setting mode requests
-		self.arming_client = rospy.ServiceProxy('/iris/mavros/cmd/arming', CommandBool)
-		self.set_mode_client = rospy.ServiceProxy('/iris/mavros/set_mode', SetMode) 
+		super(carrier_control, self).__init__()
 
-	def state_cb(self,data):
-		# function for holding the current state when the state subscriber is called
-		global current_state
-		current_state = data
+		self.carrier_pos = PoseStamped()
+		self.carrier_state = State()
 
-	def position_control(self):
-		global pose_lag, pose_iter, vel_switch
+		self.local_pos_pub_carrier = rospy.Publisher(
+			'/iris/mavros/setpoint_position/local', PoseStamped, queue_size=1)
 
-		if pose_lag >= 0:
-			pose_lag -= 1
-		# shift position of MAV to center of image 
-		elif pose_lag == -1:
-			vel_switch = 0
+		self.arming_client_carrier = rospy.ServiceProxy(
+			'/iris/mavros/cmd/arming', CommandBool)
+		self.set_mode_client_carrier = rospy.ServiceProxy(
+			'/iris/mavros/set_mode', SetMode)
 
-		if vel_switch == 0:
-			# desired pose to be published
-			pose = PoseStamped()
-			pose.pose.position.x = 0.0
-			pose.pose.position.y = 0.0
-			pose.pose.position.z = 1.0
+		self.carrier_pos_thread = Thread(target=self.carrier_pos_pub, args=(0, 0, 2,))
 
-			# update timestamp and publish pose 
-			pose.header.stamp = rospy.Time.now()
-			self.local_pos_pub.publish(pose)
-		elif vel_switch == 1:
-			# desired pose to be published
-			vel = TwistStamped()
-			vel.twist.linear.x = 0.1
-			vel.twist.linear.y = 0.0
-			vel.twist.linear.z = 0.0
 
-			# update timestamp and publish pose 
-			vel.header.stamp = rospy.Time.now()
-			self.vel_pub.publish(vel)
+	def state_carrier_cb(self, data):
+		self.carrier_state = data
 
-# globals used primarily in keeping track of the state of the MAV
-current_state = State()
 
-vel_switch = 0
-pose_lag = 200
-pose_iter = 1
+	def carrier_pos_pub(self, x, y, z):
+		rate = rospy.Rate(self.ros_rate)
+		while not rospy.is_shutdown():
+			self.carrier_pos.pose.position.x = x
+			self.carrier_pos.pose.position.y = y
+			self.carrier_pos.pose.position.z = z
 
-# main function for exectuing carrier_control node
+			self.carrier_pos.header.stamp = rospy.Time.now()
+			self.local_pos_pub_carrier.publish(self.carrier_pos)
+
+			rate.sleep()
+
+
+	def carrier_procedure(self):
+		# delay arming
+		time.sleep(5)
+
+		# arm the MAV
+		if not self.carrier_state.armed:
+			self.arming_client_carrier(True)
+			rospy.loginfo("Carrier armed: %r" % True)
+
+		# send takeoff setpoint
+		self.carrier_pos_thread.start()
+
+		# delay switch to offboard mode to ensure sufficient initial setpoint stream
+		time.sleep(5)
+		if self.carrier_state.mode != "OFFBOARD":
+			self.set_mode_client_carrier(base_mode=0, custom_mode="OFFBOARD")
+			rospy.loginfo("Carrier mode: %s" % "OFFBOARD")
+
+
 def main():
-	# call carrier_control class and initialize node
-	cc = carrier_control()
+	# initialize ros node 
 	rospy.init_node('carrier_control')
 
-	global current_state
-	prev_state = current_state
-
-	# data rate (must be more than 2Hz)
-	rate = rospy.Rate(7.0)
-
-	# send a few position setpoints before starting
-	for i in range(100):
-		cc.position_control()
-		rate.sleep()
-    
-	# wait for FCU connection
-	while not current_state.connected:
-		rate.sleep()
-
-	# arm the MAV and set to OFFBOARD mode
-	last_request = rospy.get_rostime()
-	while not rospy.is_shutdown():
-		now = rospy.get_rostime()
-		if current_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
-			cc.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
-			last_request = now 
-		else:
-			if not current_state.armed and (now - last_request > rospy.Duration(5.)):
-				cc.arming_client(True)
-				last_request = now 
-
-		# log MAV state and mode changes
-		if prev_state.armed != current_state.armed:
-			rospy.loginfo("Vehicle armed: %r" % current_state.armed)
-		if prev_state.mode != current_state.mode:
-			rospy.loginfo("Current mode: %s" % current_state.mode)
-		prev_state = current_state
-		
-		# call position_control function to update timestamp and publish pose  
-		cc.position_control()
-		rate.sleep()
+	# begin the docking procedure 
+	carrier_control().carrier_procedure()
 
 if __name__ == '__main__':
 	main()

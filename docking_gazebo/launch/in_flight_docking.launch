@@ -122,8 +122,4 @@
         </include>
     </group>
 
-    <!-- Control nodes -->
-    <node name="donut_docking" pkg="docking_gazebo" type="in_flight_docking" output="screen" />
-    <node name="carrier_control" pkg="docking_gazebo" type="carrier_control" output="screen" />
-
 </launch>
