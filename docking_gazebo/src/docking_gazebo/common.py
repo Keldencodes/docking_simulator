@@ -36,19 +36,19 @@ class Common(object):
 		self.carrier_pose = np.zeros(3)
 
 		self.local_pos_pub_docker = rospy.Publisher(
-			'/donut/mavros/setpoint_position/local', PoseStamped, queue_size=1)
+			'/docker/mavros/setpoint_position/local', PoseStamped, queue_size=1)
 		self.mocap_pos_pub = rospy.Publisher(
-			'/donut/mavros/mocap/pose', PoseStamped, queue_size=1)
+			'/docker/mavros/mocap/pose', PoseStamped, queue_size=1)
 		
 		self.local_pos_sub = rospy.Subscriber(
-			'/donut/mavros/local_position/pose', PoseStamped, self.pose_cb)
+			'/docker/mavros/local_position/pose', PoseStamped, self.pose_cb)
 		self.state_docker_sub = rospy.Subscriber(
-			'/donut/mavros/state', State, self.state_docker_cb)
+			'/docker/mavros/state', State, self.state_docker_cb)
 
 		self.arming_client_docker = rospy.ServiceProxy(
-			'/donut/mavros/cmd/arming', CommandBool)
+			'/docker/mavros/cmd/arming', CommandBool)
 		self.set_mode_client_docker = rospy.ServiceProxy(
-			'/donut/mavros/set_mode', SetMode)
+			'/docker/mavros/set_mode', SetMode)
 
 		self.pos_desired_q = Queue() 
 

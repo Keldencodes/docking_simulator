@@ -24,7 +24,7 @@
         <arg name="respawn_gazebo" value="$(arg respawn_gazebo)"/>
     </include>
 
-    <group ns="donut">
+    <group ns="docker">
         <!-- Vehicle pose -->
         <arg name="x" default="3.0"/>
         <arg name="y" default="5.0"/>
@@ -33,10 +33,9 @@
         <arg name="P" default="0"/>
         <arg name="Y" default="0"/>
         <!-- Vehicle parameters -->
-        <arg name="vehicle" default="donut"/>
-        <arg name="airframe" default="solo"/>
+        <arg name="vehicle" default="docker"/>
         <arg name="ID" default="1"/>
-        <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg airframe)"/>
+        <arg name="rcS" default="$(find docking_description)/params/$(arg vehicle)"/>
         <arg name="mavlink_udp_port" value="14560"/>
 
         <!-- PX4 configs -->
@@ -48,7 +47,7 @@
         </node>
 
         <!-- Gazebo model -->
-        <arg name="model_name" default="donut"/>
+        <arg name="model_name" default="docker"/>
         <arg name="model" default="$(find docking_description)/urdf/$(arg vehicle)_main.xacro"/>
         <arg name="rotors_description_dir" default="$(find docking_description)"/>
         <!-- send the robot XML to param server -->
@@ -72,7 +71,7 @@
         </include>
     </group>
 
-    <group ns="iris">
+    <group ns="carrier">
         <!-- Vehicle pose -->
         <arg name="x" default="0"/>
         <arg name="y" default="0"/>
@@ -81,10 +80,9 @@
         <arg name="P" default="0"/>
         <arg name="Y" default="0"/>
         <!-- Vehicle parameters -->
-        <arg name="vehicle" default="iris"/>
-        <arg name="airframe" default="typhoon_h480"/>
+        <arg name="vehicle" default="carrier"/>
         <arg name="ID" default="2"/>
-        <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg airframe)"/>
+        <arg name="rcS" default="$(find docking_description)/params/$(arg vehicle)"/>
         <arg name="mavlink_udp_port" value="14562"/>
 
         <!-- PX4 configs -->
@@ -96,7 +94,7 @@
         </node>
 
         <!-- Gazebo model -->
-        <arg name="model_name" default="iris"/>
+        <arg name="model_name" default="carrier"/>
         <arg name="model" default="$(find docking_description)/urdf/$(arg vehicle)_main.xacro"/>
         <arg name="rotors_description_dir" default="$(find docking_description)"/>
         <!-- send the robot XML to param server -->

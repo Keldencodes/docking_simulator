@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 
-<robot name="iris" xmlns:xacro="http://ros.org/wiki/xacro">
+<robot name="docker" xmlns:xacro="http://ros.org/wiki/xacro">
   <!-- Properties that can be assigned at build time as arguments.
   Is there a reason not to make all properties arguments?
   -->
-  <xacro:arg name='name' default='iris' />
+  <xacro:arg name='name' default='docker' />
   <xacro:arg name='mavlink_addr' default='INADDR_ANY' />
   <xacro:arg name='mavlink_udp_port' default='14560' />
   <xacro:arg name='serial_enabled' default='false' />
@@ -16,7 +16,7 @@
   <xacro:arg name='hil_state_level' default='false' />
   <xacro:arg name='send_odometry' default='false' />
   <xacro:arg name='vehicle_is_tailsitter' default='false' />
-  <xacro:arg name='visual_material' default='DarkGrey' />
+  <xacro:arg name='visual_material' default='White' />
   <xacro:arg name='enable_mavlink_interface' default='true' />
   <xacro:arg name='enable_wind' default='false' />
   <!-- The following causes segfault with multiple vehicles if defaults to true!!! -->
@@ -26,7 +26,7 @@
   <!-- macros for gazebo plugins, sensors -->
   <xacro:include filename="$(find docking_description)/urdf/component_snippets.xacro" />
 
-  <!-- Instantiate iris "mechanics" -->
+  <!-- Instantiate "mechanics" -->
   <xacro:include filename="$(find docking_description)/urdf/$(arg name).xacro" />
 
   <xacro:if value="$(arg enable_wind)">

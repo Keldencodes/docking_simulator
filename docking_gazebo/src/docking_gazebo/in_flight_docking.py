@@ -21,16 +21,16 @@ class in_flight_docking(Common):
 		self.gps_pos = GlobalPositionTarget()
 
 		self.gps_docker_pub = rospy.Publisher(
-			'/donut/mavros/setpoint_position/global', GlobalPositionTarget, queue_size=1)
+			'/docker/mavros/setpoint_position/global', GlobalPositionTarget, queue_size=1)
 
 		self.gps_carrier_sub = rospy.Subscriber(
-			'/iris/mavros/global_position/global', NavSatFix, self.gps_carrier_cb)
+			'/carrier/mavros/global_position/global', NavSatFix, self.gps_carrier_cb)
 		self.gps_docker_sub = rospy.Subscriber(
-			'/donut/mavros/global_position/global', NavSatFix, self.gps_docker_cb)
+			'/docker/mavros/global_position/global', NavSatFix, self.gps_docker_cb)
 		self.image_sub = rospy.Subscriber(
-			'/iris/camera/image_raw', Image, self.detect_led)
+			'/carrier/camera/image_raw', Image, self.detect_led)
 		self.carrier_pos_sub = rospy.Subscriber(
-			'/iris/mavros/local_position/pose', PoseStamped, self.carrier_pose_cb)
+			'/carrier/mavros/local_position/pose', PoseStamped, self.carrier_pose_cb)
 
 
 	def gps_carrier_cb(self, data):

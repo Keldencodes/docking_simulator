@@ -20,14 +20,14 @@ class carrier_control(Common):
 		self.carrier_state = State()
 
 		self.local_pos_pub_carrier = rospy.Publisher(
-			'/iris/mavros/setpoint_position/local', PoseStamped, queue_size=1)
+			'/carrier/mavros/setpoint_position/local', PoseStamped, queue_size=1)
 
 		self.arming_client_carrier = rospy.ServiceProxy(
-			'/iris/mavros/cmd/arming', CommandBool)
+			'/carrier/mavros/cmd/arming', CommandBool)
 		self.set_mode_client_carrier = rospy.ServiceProxy(
-			'/iris/mavros/set_mode', SetMode)
+			'/carrier/mavros/set_mode', SetMode)
 
-		self.carrier_pos_thread = Thread(target=self.carrier_pos_pub, args=(0, 0, 2,))
+		self.carrier_pos_thread = Thread(target=self.carrier_pos_pub, args=(0, 0, 3,))
 
 
 	def state_carrier_cb(self, data):
