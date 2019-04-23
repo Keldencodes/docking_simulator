@@ -57,7 +57,7 @@
         mavlink_udp_port:=$(arg mavlink_udp_port) --inorder"
         />
         <!-- Spawn model -->
-        <node name="$(arg vehicle)_$(arg ID)_spawn" output="screen" pkg="gazebo_ros" type="spawn_model" args="-urdf -param rotors_description -model $(arg vehicle)_$(arg ID) -package_to_model -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg R) -P $(arg P) -Y $(arg Y)"/>
+        <node name="$(arg vehicle)_spawn" output="screen" pkg="gazebo_ros" type="spawn_model" args="-urdf -param rotors_description -model $(arg vehicle)_$(arg ID) -package_to_model -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg R) -P $(arg P) -Y $(arg Y)"/>
 
         <!-- MAVROS configs -->
         <arg name="fcu_url" default="udp://:14540@localhost:14557"/>
@@ -104,7 +104,7 @@
         mavlink_udp_port:=$(arg mavlink_udp_port) --inorder"
         />
         <!-- Spawn model -->
-        <node name="$(arg vehicle)_$(arg ID)_spawn" output="screen" pkg="gazebo_ros" type="spawn_model" args="-urdf -param rotors_description -model $(arg vehicle)_$(arg ID) -package_to_model -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg R) -P $(arg P) -Y $(arg Y)"/>
+        <node name="$(arg vehicle)_spawn" output="screen" pkg="gazebo_ros" type="spawn_model" args="-urdf -param rotors_description -model $(arg vehicle)_$(arg ID) -package_to_model -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg R) -P $(arg P) -Y $(arg Y)"/>
 
         <!-- MAVROS configs -->
         <arg name="fcu_url" default="udp://:14541@localhost:14559"/>
