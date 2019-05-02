@@ -20,11 +20,13 @@ class stationary_docking(Common):
 		# delay arming
 		time.sleep(5)
 
-		# arm the MAV
+		# arm the MAV and collect the orientation at takeoff
 		self.set_arm(True)
+		self.takeoff_ori = self.current_pose[3:]
 
-		# send takeoff setpoint
-		self.position_setpoint(0, 0, self.alt)
+		# send initial setpoint
+		self.position_setpoint(0, 0, self.alt, self.takeoff_ori[0], self.takeoff_ori[1], 
+			self.takeoff_ori[2], self.takeoff_ori[3])
 
 		# start threads to publish positions and check that positions are being reached
 		self.pos_reached_thread.start()

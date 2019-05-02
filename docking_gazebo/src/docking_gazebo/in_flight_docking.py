@@ -51,8 +51,9 @@ class in_flight_docking(Common):
 		# delay arming
 		time.sleep(5)
 
-		# arm the MAV
+		# arm the MAV collect the orientation at takeoff
 		self.set_arm(True)
+		self.takeoff_ori = self.current_pose[3:]
 
 		self.alt = 5.0
 		self.gps_alt = self.gps_carrier.altitude + self.alt

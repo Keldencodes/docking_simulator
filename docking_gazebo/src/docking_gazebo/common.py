@@ -31,7 +31,9 @@ class Common(object):
 		self.cv_shift = np.array([np.nan, np.nan, np.nan])
 		self.led_raw = np.array([np.nan, np.nan, np.nan])
 		self.led = np.array([np.nan, np.nan, np.nan])
-		self.current_pose = np.array([np.nan, np.nan, np.nan])
+		self.current_pose = np.array([np.nan, np.nan, np.nan, 
+			np.nan, np.nan, np.nan, np.nan])
+		self.takeoff_ori = np.array([np.nan, np.nan, np.nan, np.nan])
 		self.cv_pose = np.array([np.nan, np.nan, np.nan])
 		self.carrier_pose = np.zeros(3)
 
@@ -78,6 +80,10 @@ class Common(object):
 		self.current_pose[0] = data.pose.position.x
 		self.current_pose[1] = data.pose.position.y
 		self.current_pose[2] = data.pose.position.z
+		self.current_pose[3] = data.pose.orientation.x
+		self.current_pose[4] = data.pose.orientation.y
+		self.current_pose[5] = data.pose.orientation.z
+		self.current_pose[6] = data.pose.orientation.w 
 
 
 	def position_reached(self, offset=1.0, gps_offset=2.0):
@@ -86,17 +92,22 @@ class Common(object):
 			while not self.pos_desired_q.empty():
 				self.reached_event.clear()
 				desired_pose = self.pos_desired_q.get()
-				self.gps = desired_pose[3]
+				self.gps = desired_pose[7]
 
 				if not self.gps:
 					self.pos.pose.position.x = desired_pose[0]
 					self.pos.pose.position.y = desired_pose[1]
 					self.pos.pose.position.z = desired_pose[2]
+					self.pos.pose.orientation.x = desired_pose[3]
+					self.pos.pose.orientation.y = desired_pose[4]
+					self.pos.pose.orientation.z = desired_pose[5]
+					self.pos.pose.orientation.w = desired_pose[6]
 
 					reached = False
 					while not reached:
-						if np.linalg.norm(desired_pose[:3] - self.current_pose) < offset:
-							time.sleep(8)
+						if np.linalg.norm(
+							desired_pose[:3] - self.current_pose[:3]) < offset:
+							time.sleep(10)
 							self.reached_event.set()
 							reached = True
 				elif self.gps:
@@ -123,8 +134,8 @@ class Common(object):
 			rate.sleep()
 
 
-	def position_setpoint(self, x, y, z, gps=False):
-		self.pos_desired_q.put(np.array([x, y, z, gps]))
+	def position_setpoint(self, x, y, z, ori_x=0, ori_y=0, ori_z=0, ori_w=1, gps=False):
+		self.pos_desired_q.put(np.array([x, y, z, ori_x, ori_y, ori_z, ori_w, gps]))
 
 
 	def position_pub(self):
@@ -301,9 +312,10 @@ class Common(object):
 
 	def center_mav(self):
 		if self.center_event.wait():
-			self.cv_shift = self.current_pose - self.cv_pose
+			self.cv_shift = self.current_pose[:3] - self.cv_pose
 			self.position_setpoint(self.cv_shift[0], self.cv_shift[1], 
-				self.alt + self.carrier_pose[2])
+				self.alt + self.carrier_pose[2], self.takeoff_ori[0], 
+				self.takeoff_ori[1], self.takeoff_ori[2], self.takeoff_ori[3])
 
 			time.sleep(2)
 			self.docking_event.set()
@@ -313,7 +325,7 @@ class Common(object):
 		if self.docking_event.wait() and self.reached_event.wait():
 			self.mocap_event.set()
 
-			init_pose = self.current_pose - self.cv_pose
+			init_pose = self.current_pose[:3] - self.cv_pose
 			self.cam_alt = self.alt - self.cv_pose[2] + self.carrier_pose[2]
 
 			rate = rospy.Rate(self.ros_rate)
@@ -339,6 +351,10 @@ class Common(object):
 						self.pos.pose.position.x = self.cv_shift[0]
 						self.pos.pose.position.y = self.cv_shift[1]
 						self.pos.pose.position.z = 0.0
+						self.pos.pose.orientation.x = self.takeoff_ori[0]
+						self.pos.pose.orientation.y = self.takeoff_ori[1]
+						self.pos.pose.orientation.z = self.takeoff_ori[2]
+						self.pos.pose.orientation.w = self.takeoff_ori[3]
 						self.dead_switch = 1
 					elif off_center <= self.dead_dia_irl:
 						self.dead_switch = 0
@@ -353,12 +369,16 @@ class Common(object):
 				if self.reached_event.is_set():
 					if self.cv_pose[2] >= 0.3 and self.lost_event.is_set():
 						self.position_setpoint(self.cv_shift[0], 
-							self.cv_shift[1], self.alt + self.carrier_pose[2])
+							self.cv_shift[1], self.alt + self.carrier_pose[2], 
+							self.takeoff_ori[0], self.takeoff_ori[1], 
+							self.takeoff_ori[2], self.takeoff_ori[3])
 						time.sleep(2)
 						self.dead_switch = 0
 					elif self.cv_pose[2] < 0.3 and self.dead_switch == 1:
 						self.position_setpoint(self.cv_shift[0], 
-							self.cv_shift[1], self.alt + self.carrier_pose[2])
+							self.cv_shift[1], self.alt + self.carrier_pose[2], 
+							self.takeoff_ori[0], self.takeoff_ori[1], 
+							self.takeoff_ori[2], self.takeoff_ori[3])
 						time.sleep(2)
 						self.dead_switch = 0
 					elif self.cv_pose[2] < 0.3 and self.dead_switch == 0:

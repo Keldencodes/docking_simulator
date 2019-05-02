@@ -6,7 +6,7 @@ from common import Common
 from threading import Thread, Timer
 import rospy
 import time
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 from mavros_msgs.msg import State
 from mavros_msgs.srv import CommandBool, SetMode
 
@@ -17,10 +17,16 @@ class carrier_control(Common):
 		super(carrier_control, self).__init__()
 
 		self.carrier_pos = PoseStamped()
+		self.carrier_vel = TwistStamped()
 		self.carrier_state = State()
 
 		self.local_pos_pub_carrier = rospy.Publisher(
 			'/carrier/mavros/setpoint_position/local', PoseStamped, queue_size=1)
+		self.local_vel_pub_carrier = rospy.Publisher(
+			'/carrier/mavros/setpoint_attitude/cmd_vel', TwistStamped, queue_size=1)
+
+		self.state_docker_sub = rospy.Subscriber(
+			'/carrier/mavros/state', State, self.state_carrier_cb)
 
 		self.arming_client_carrier = rospy.ServiceProxy(
 			'/carrier/mavros/cmd/arming', CommandBool)
@@ -28,6 +34,7 @@ class carrier_control(Common):
 			'/carrier/mavros/set_mode', SetMode)
 
 		self.carrier_pos_thread = Thread(target=self.carrier_pos_pub, args=(0, 0, 3,))
+		self.carrier_vel_thread = Thread(target=self.carrier_vel_pub, args=(0, 0, 5,))
 
 
 	def state_carrier_cb(self, data):
@@ -45,6 +52,19 @@ class carrier_control(Common):
 			self.local_pos_pub_carrier.publish(self.carrier_pos)
 
 			rate.sleep()
+
+
+	def carrier_vel_pub(self, x, y, z):
+		rate = rospy.Rate(self.ros_rate)
+		while not rospy.is_shutdown():
+			self.carrier_vel.twist.linear.x = x
+			self.carrier_vel.twist.linear.y = y
+			self.carrier_vel.twist.linear.z = z
+
+			self.carrier_vel.header.stamp = rospy.Time.now()
+			self.local_vel_pub_carrier.publish(self.carrier_vel)
+
+			rate.sleep()			
 
 
 	def carrier_procedure(self):
