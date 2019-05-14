@@ -6,6 +6,7 @@ import rospy
 import cv2
 from geometry_msgs.msg import PoseStamped
 from mavros_msgs.msg import State
+from std_msgs.msg import Bool
 from threading import Thread, Event, Timer
 from mavros_msgs.srv import CommandBool, SetMode
 from cv_bridge import CvBridge, CvBridgeError
@@ -21,9 +22,8 @@ class Common(object):
 		self.mocap_pos = PoseStamped()
 		self.state = State()
 
-		self.gps = False
 		self.ros_rate = 40
-		self.alt = 4.0
+		self.alt = 6.0
 		self.dead_dia_irl = 0.1016
 		self.dead_switch = 0
 
@@ -41,6 +41,8 @@ class Common(object):
 			'/docker/mavros/setpoint_position/local', PoseStamped, queue_size=1)
 		self.mocap_pos_pub = rospy.Publisher(
 			'/docker/mavros/mocap/pose', PoseStamped, queue_size=1)
+		self.carrier_land_pub = rospy.Publisher(
+			'/carrier/land_bool', Bool, queue_size=1)
 		
 		self.local_pos_sub = rospy.Subscriber(
 			'/docker/mavros/local_position/pose', PoseStamped, self.pose_cb)
@@ -64,7 +66,6 @@ class Common(object):
 
 		self.led_event = Event()
 		self.filter_event = Event()
-		self.center_event = Event()
 		self.reached_event = Event()
 		self.docking_event = Event()
 		self.mocap_event = Event()
@@ -92,61 +93,35 @@ class Common(object):
 			while not self.pos_desired_q.empty():
 				self.reached_event.clear()
 				desired_pose = self.pos_desired_q.get()
-				self.gps = desired_pose[7]
 
-				if not self.gps:
-					self.pos.pose.position.x = desired_pose[0]
-					self.pos.pose.position.y = desired_pose[1]
-					self.pos.pose.position.z = desired_pose[2]
-					self.pos.pose.orientation.x = desired_pose[3]
-					self.pos.pose.orientation.y = desired_pose[4]
-					self.pos.pose.orientation.z = desired_pose[5]
-					self.pos.pose.orientation.w = desired_pose[6]
+				self.pos.pose.position.x = desired_pose[0]
+				self.pos.pose.position.y = desired_pose[1]
+				self.pos.pose.position.z = desired_pose[2]
+				self.pos.pose.orientation.x = desired_pose[3]
+				self.pos.pose.orientation.y = desired_pose[4]
+				self.pos.pose.orientation.z = desired_pose[5]
+				self.pos.pose.orientation.w = desired_pose[6]
 
-					reached = False
-					while not reached:
-						if np.linalg.norm(
-							desired_pose[:3] - self.current_pose[:3]) < offset:
-							time.sleep(10)
-							self.reached_event.set()
-							reached = True
-				elif self.gps:
-					self.gps_pos.latitude = desired_pose[0]
-					self.gps_pos.longitude = desired_pose[1]
-					self.gps_pos.altitude = desired_pose[2]
-
-					gps_dif = np.zeros(3)
-					reached = False
-					while not reached:
-						gps_dif[0] = 111111.0*abs(
-							desired_pose[0] - self.gps_docker.latitude)
-						gps_dif[1] = 111111.0*abs(
-							desired_pose[1] - self.gps_docker.longitude)
-						gps_dif[2] = abs(desired_pose[2] - self.gps_docker.altitude)
-						if np.all(gps_dif < gps_offset):
-							time.sleep(10)
-							self.reached_event.set()
-							reached = True
-
-			else:
-				self.center_event.set()
+				reached = False
+				while not reached:
+					if np.linalg.norm(
+						desired_pose[:3] - self.current_pose[:3]) < offset:
+						time.sleep(10)
+						self.reached_event.set()
+						reached = True
 
 			rate.sleep()
 
 
-	def position_setpoint(self, x, y, z, ori_x=0, ori_y=0, ori_z=0, ori_w=1, gps=False):
-		self.pos_desired_q.put(np.array([x, y, z, ori_x, ori_y, ori_z, ori_w, gps]))
+	def position_setpoint(self, x, y, z, ori_x=0, ori_y=0, ori_z=0, ori_w=1):
+		self.pos_desired_q.put(np.array([x, y, z, ori_x, ori_y, ori_z, ori_w]))
 
 
 	def position_pub(self):
 		rate = rospy.Rate(self.ros_rate)
 		while not rospy.is_shutdown():
-			if not self.gps:
-				self.pos.header.stamp = rospy.Time.now()
-				self.local_pos_pub_docker.publish(self.pos)
-			elif self.gps:
-				self.gps_pos.header.stamp = rospy.Time.now()
-				self.gps_docker_pub.publish(self.gps_pos)
+			self.pos.header.stamp = rospy.Time.now()
+			self.local_pos_pub_docker.publish(self.pos)
 
 			rate.sleep()
 
@@ -204,9 +179,9 @@ class Common(object):
 
 			self.led = led_kalman
 
-			if not self.final_event.is_set():
+			if not self.filter_event.is_set() and not self.final_event.is_set():
 				self.filter_event.set()
-			else:
+			elif self.final_event.is_set():
 				self.filter_event.clear()
 
 			rate.sleep()
@@ -214,7 +189,7 @@ class Common(object):
 
 	def call_filter(self):
 		if self.led_event.wait():
-			Timer(2.0, self.filter_display).start()
+			Timer(10.0, self.filter_display).start()
 
 
 	def detect_led(self, data):
@@ -311,7 +286,7 @@ class Common(object):
 
 
 	def center_mav(self):
-		if self.center_event.wait():
+		if self.mocap_event.wait():
 			self.cv_shift = self.current_pose[:3] - self.cv_pose
 			self.position_setpoint(self.cv_shift[0], self.cv_shift[1], 
 				self.alt + self.carrier_pose[2], self.takeoff_ori[0], 
@@ -322,7 +297,8 @@ class Common(object):
 
 
 	def mocap_feedback(self):
-		if self.docking_event.wait() and self.reached_event.wait():
+		if self.reached_event.wait() and self.filter_event.wait():
+			time.sleep(2)
 			self.mocap_event.set()
 
 			init_pose = self.current_pose[:3] - self.cv_pose
@@ -341,29 +317,29 @@ class Common(object):
 
 
 	def dock_initial(self):
-		if self.mocap_event.wait():
+		if self.docking_event.wait():
 			rate = rospy.Rate(self.ros_rate)
 			while not rospy.is_shutdown() and not self.final_event.is_set():
 				if self.reached_event.is_set():
 					off_center = 2*np.sqrt(self.cv_pose[0]**2 + self.cv_pose[1]**2)
 					if off_center > self.dead_dia_irl and self.dead_switch == 0:
 						self.cv_shift = self.cv_shift - self.cv_pose
-						self.pos.pose.position.x = self.cv_shift[0]
-						self.pos.pose.position.y = self.cv_shift[1]
-						self.pos.pose.position.z = 0.0
-						self.pos.pose.orientation.x = self.takeoff_ori[0]
-						self.pos.pose.orientation.y = self.takeoff_ori[1]
-						self.pos.pose.orientation.z = self.takeoff_ori[2]
-						self.pos.pose.orientation.w = self.takeoff_ori[3]
 						self.dead_switch = 1
 					elif off_center <= self.dead_dia_irl:
 						self.dead_switch = 0
+					self.pos.pose.position.x = self.cv_shift[0]
+					self.pos.pose.position.y = self.cv_shift[1]
+					self.pos.pose.position.z = 0.0
+					self.pos.pose.orientation.x = self.takeoff_ori[0]
+					self.pos.pose.orientation.y = self.takeoff_ori[1]
+					self.pos.pose.orientation.z = self.takeoff_ori[2]
+					self.pos.pose.orientation.w = self.takeoff_ori[3]
 
 				rate.sleep()
 
 
 	def dock_final(self):
-		if self.mocap_event.wait():
+		if self.docking_event.wait():
 			rate = rospy.Rate(self.ros_rate)
 			while not rospy.is_shutdown() and not self.final_event.is_set():
 				if self.reached_event.is_set():
@@ -384,6 +360,7 @@ class Common(object):
 					elif self.cv_pose[2] < 0.3 and self.dead_switch == 0:
 						self.final_event.set()
 						time.sleep(2)
+						self.carrier_land_pub.publish(True)
 						self.set_arm(False)
 
 				rate.sleep()

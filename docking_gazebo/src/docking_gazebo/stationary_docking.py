@@ -16,6 +16,7 @@ class stationary_docking(Common):
 		self.image_sub = rospy.Subscriber(
 			'/base/camera1/image_raw', Image, self.detect_led)
 
+
 	def docking_procedure(self):
 		# delay arming
 		time.sleep(5)
@@ -38,11 +39,11 @@ class stationary_docking(Common):
 		# begin filtering vision data
 		self.filter_thread.start()
 
-		# center the mav on the image
-		self.center_thread.start()
-
 		# begin motion capture feedback
 		self.mocap_thread.start()
+
+		# center the mav on the image
+		self.center_thread.start()
 
 		# dock 
 		self.dock_init_thread.start()

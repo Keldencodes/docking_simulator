@@ -6,45 +6,15 @@ from common import Common
 from threading import Timer
 import rospy
 import time
-from mavros_msgs.msg import GlobalPositionTarget
-from sensor_msgs.msg import NavSatFix, Image
-from geometry_msgs.msg import PoseStamped
-
+from sensor_msgs.msg import Image
 
 class in_flight_docking(Common):
 
 	def __init__(self):
 		super(in_flight_docking, self).__init__()
 
-		self.gps_carrier = NavSatFix()
-		self.gps_docker = NavSatFix()
-		self.gps_pos = GlobalPositionTarget()
-
-		self.gps_docker_pub = rospy.Publisher(
-			'/docker/mavros/setpoint_position/global', GlobalPositionTarget, queue_size=1)
-
-		self.gps_carrier_sub = rospy.Subscriber(
-			'/carrier/mavros/global_position/global', NavSatFix, self.gps_carrier_cb)
-		self.gps_docker_sub = rospy.Subscriber(
-			'/docker/mavros/global_position/global', NavSatFix, self.gps_docker_cb)
 		self.image_sub = rospy.Subscriber(
 			'/carrier/camera/image_raw', Image, self.detect_led)
-		self.carrier_pos_sub = rospy.Subscriber(
-			'/carrier/mavros/local_position/pose', PoseStamped, self.carrier_pose_cb)
-
-
-	def gps_carrier_cb(self, data):
-		self.gps_carrier = data
-
-
-	def gps_docker_cb(self, data):
-		self.gps_docker = data
-
-
-	def carrier_pose_cb(self, data):
-		self.carrier_pose[0] = data.pose.position.x
-		self.carrier_pose[1] = data.pose.position.y
-		self.carrier_pose[2] = data.pose.position.z
 
 
 	def docking_procedure(self):
@@ -55,12 +25,9 @@ class in_flight_docking(Common):
 		self.set_arm(True)
 		self.takeoff_ori = self.current_pose[3:]
 
-		self.alt = 5.0
-		self.gps_alt = self.gps_carrier.altitude + self.alt
-
 		# send takeoff setpoint
-		self.position_setpoint(self.gps_docker.latitude, self.gps_docker.longitude, 
-			self.gps_alt, gps=True)
+		self.position_setpoint(0, 0, self.alt, self.takeoff_ori[0], self.takeoff_ori[1], 
+			self.takeoff_ori[2], self.takeoff_ori[3])
 
 		# start threads to publish positions and check that positions are being reached
 		self.pos_reached_thread.start()
@@ -69,18 +36,14 @@ class in_flight_docking(Common):
 		# delay switch to offboard mode to ensure sufficient initial setpoint stream
 		Timer(5.0, self.set_offboard).start()
 
-		# bring within vision range
-		self.position_setpoint(self.gps_carrier.latitude, self.gps_carrier.longitude, 
-			self.gps_alt, gps=True)
-
 		# begin filtering vision data
 		self.filter_thread.start()
 
-		# center the mav on the image
-		self.center_thread.start()
-
 		# begin motion capture feedback
 		self.mocap_thread.start()
+
+		# center the mav on the image
+		self.center_thread.start()
 
 		# dock 
 		self.dock_init_thread.start()
