@@ -111,15 +111,28 @@ class carrier_control(Common):
 			rate.sleep()
 
 
+	def carrier_arm(self, arm):
+		if arm and not self.carrier_state.armed:
+			self.arming_client_carrier(True)
+			rospy.loginfo("Carrier armed: %r" % arm)
+
+		elif not arm:
+			self.arming_client_carrier(False)
+			rospy.loginfo("Carrier armed: %r" % arm)
+
+
 	def carrier_land(self):
 		rate = rospy.Rate(self.ros_rate)
 		while not rospy.is_shutdown():
 			if self.carrier_land_bool:
 				self.carrier_setpoint(self.gps_docker.latitude, self.gps_docker.longitude,
 					self.initial_setpoint.altitude - 2.0)
+				time.sleep(3)
+				self.carrier_arm(False)
+
 				break
 
-			rate.sleep()		
+			rate.sleep()	
 
 
 	def carrier_procedure(self):
@@ -129,9 +142,7 @@ class carrier_control(Common):
 		self.initial_setpoint = self.gps_carrier
 
 		# arm the MAV
-		if not self.carrier_state.armed:
-			self.arming_client_carrier(True)
-			rospy.loginfo("Carrier armed: %r" % True)
+		self.carrier_arm(True)
 
 		# send desired setpoints
 		self.carrier_setpoint(self.gps_carrier.latitude, self.gps_carrier.longitude, 
