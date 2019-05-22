@@ -13,6 +13,7 @@ from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 from queue import Queue
 import time
+import tf
 
 class Common(object):
 
@@ -23,7 +24,7 @@ class Common(object):
 		self.state = State()
 
 		self.ros_rate = 40
-		self.alt = 6.0
+		self.alt = 4.0
 		self.dead_dia_irl = 0.1016
 		self.dead_switch = 0
 
@@ -35,6 +36,7 @@ class Common(object):
 			np.nan, np.nan, np.nan, np.nan])
 		self.takeoff_ori = np.array([np.nan, np.nan, np.nan, np.nan])
 		self.cv_pose = np.array([np.nan, np.nan, np.nan])
+		self.cv_pose_raw = np.array([np.nan, np.nan, np.nan])
 		self.carrier_pose = np.zeros(3)
 
 		self.local_pos_pub_docker = rospy.Publisher(
@@ -262,9 +264,17 @@ class Common(object):
 				# compute position of MAV from above values and known LED diameter
 				led_dia_irl = 0.2413
 				unit_dist = led_dia_irl/self.led[2]
-				self.cv_pose[0] = diff_y*unit_dist
-				self.cv_pose[1] = diff_x*unit_dist
-				self.cv_pose[2] = foc_len*unit_dist
+				self.cv_pose_raw[0] = diff_y*unit_dist
+				self.cv_pose_raw[1] = diff_x*unit_dist
+				self.cv_pose_raw[2] = foc_len*unit_dist
+
+				# translate the cv pose from the camera frame to the local frame
+				yaw_offset = tf.transformations.euler_from_quaternion(self.takeoff_ori)[2]
+				self.cv_pose[0] = (np.cos(yaw_offset)*self.cv_pose_raw[0] -
+					np.sin(yaw_offset)*self.cv_pose_raw[1])
+				self.cv_pose[1] = (np.sin(yaw_offset)*self.cv_pose_raw[0] +
+					np.cos(yaw_offset)*self.cv_pose_raw[1])
+				self.cv_pose[2] = self.cv_pose_raw[2]
 
 				# display LED detection on image with a cricle and center point
 				img = cv2.circle(img, (np.uint16(self.led[0]),np.uint16(self.led[1])), 
@@ -325,6 +335,8 @@ class Common(object):
 					if off_center > self.dead_dia_irl and self.dead_switch == 0:
 						self.cv_shift = self.cv_shift - self.cv_pose
 						self.dead_switch = 1
+						time.sleep(1)
+						self.dead_switch = 0
 					elif off_center <= self.dead_dia_irl:
 						self.dead_switch = 0
 					self.pos.pose.position.x = self.cv_shift[0]

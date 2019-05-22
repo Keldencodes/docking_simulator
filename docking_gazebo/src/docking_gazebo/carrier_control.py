@@ -126,8 +126,8 @@ class carrier_control(Common):
 		while not rospy.is_shutdown():
 			if self.carrier_land_bool:
 				self.carrier_setpoint(self.gps_docker.latitude, self.gps_docker.longitude,
-					self.initial_setpoint.altitude - 2.0)
-				time.sleep(3)
+					self.initial_setpoint.altitude)
+				time.sleep(5)
 				self.carrier_arm(False)
 
 				break

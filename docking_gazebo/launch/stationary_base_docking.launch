@@ -4,12 +4,12 @@
     <!-- MAVROS posix SITL environment launch script -->
     <!-- launches MAVROS, PX4 SITL, Gazebo environment, and spawns vehicle -->
     <!-- vehicle pose -->
-    <arg name="x" default="3.0"/>
-    <arg name="y" default="5.0"/>
+    <arg name="x" default="1.0"/>
+    <arg name="y" default="2.0"/>
     <arg name="z" default="0"/>
     <arg name="R" default="0"/>
     <arg name="P" default="0"/>
-    <arg name="Y" default="0"/>
+    <arg name="Y" default="1.8326"/>
     <!-- vehicle model and world -->
     <arg name="est" default="lpe"/>
     <arg name="vehicle" default="docker"/>
@@ -40,7 +40,7 @@
             command="$(find xacro)/xacro --inorder
                     '$(arg model)'
                     namespace:=$(arg model_name)" />
-        <node name="spawn_$(arg model_name)" pkg="gazebo_ros" type="spawn_model" respawn="false"    output="screen" args="-param robot_description -urdf -model $(arg model_name)" />
+        <node name="spawn_$(arg model_name)" pkg="gazebo_ros" type="spawn_model" respawn="false"    output="screen" args="-param robot_description -urdf -model $(arg model_name) -Y $(arg Y)" />
     </group>
 
     <group ns="docker">
