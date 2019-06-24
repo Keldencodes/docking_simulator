@@ -13,6 +13,7 @@ class stationary_docking(Common):
 	def __init__(self):
 		super(stationary_docking, self).__init__()
 
+		# ros subscriber
 		self.image_sub = rospy.Subscriber(
 			'/base/camera1/image_raw', Image, self.detect_led)
 
@@ -21,7 +22,7 @@ class stationary_docking(Common):
 		# delay arming
 		time.sleep(5)
 
-		# arm the MAV and collect the orientation at takeoff
+		# arm the mav and collect the orientation at takeoff
 		self.set_arm(True)
 		self.takeoff_ori = self.current_pose[3:]
 
@@ -39,13 +40,13 @@ class stationary_docking(Common):
 		# begin filtering vision data
 		self.filter_thread.start()
 
-		# begin motion capture feedback
-		self.mocap_thread.start()
+		# # begin motion capture feedback
+		# self.mocap_thread.start()
 
 		# center the mav on the image
 		self.center_thread.start()
 
-		# dock 
+		# dock
 		self.dock_init_thread.start()
 		self.dock_final_thread.start()
 		

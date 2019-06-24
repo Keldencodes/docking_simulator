@@ -45,7 +45,7 @@ param set EKF2_ANGERR_INIT 0.01
 param set SDLOG_DIRS_MAX 7
 param set SITL_UDP_PRT 14560
 param set LPE_FUSION 145
-param set ATT_EXT_HDG_M 2
+param set ATT_EXT_HDG_M 0
 param set MPC_Z_VEL_MAX_DN 0.2
 param set MPC_Z_VEL_MAX_UP 0.6
 param set MPC_XY_VEL_MAX 0.6

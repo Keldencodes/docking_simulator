@@ -40,11 +40,11 @@ param set MC_ROLLRATE_D 0.001
 param set MC_PITCHRATE_P 0.08
 param set MC_PITCHRATE_I 0.3
 param set MC_PITCHRATE_D 0.001
+param set MPC_Z_VEL_MAX_UP 0.5
 param set EKF2_GBIAS_INIT 0.01
 param set EKF2_ANGERR_INIT 0.01
 param set SITL_UDP_PRT 14562
 param set SDLOG_DIRS_MAX 7
-param set MPC_Z_VEL_MAX_UP 0.6
 # GPS only mode
 param set LPE_FUSION 145
 

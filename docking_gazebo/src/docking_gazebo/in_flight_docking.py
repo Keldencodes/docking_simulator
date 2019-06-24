@@ -13,6 +13,7 @@ class in_flight_docking(Common):
 	def __init__(self):
 		super(in_flight_docking, self).__init__()
 
+		# ros subscribers
 		self.image_sub = rospy.Subscriber(
 			'/carrier/camera/image_raw', Image, self.detect_led)
 
@@ -21,9 +22,10 @@ class in_flight_docking(Common):
 		# delay arming
 		time.sleep(5)
 
-		self.alt = 6.0
+		# set the altitude [m] of the docker 
+		self.alt = 8.0     
 
-		# arm the MAV collect the orientation at takeoff
+		# arm the mav collect the orientation at takeoff
 		self.set_arm(True)
 		self.takeoff_ori = self.current_pose[3:]
 
