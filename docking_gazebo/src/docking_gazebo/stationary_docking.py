@@ -40,8 +40,8 @@ class stationary_docking(Common):
 		# begin filtering vision data
 		self.filter_thread.start()
 
-		# # begin motion capture feedback
-		# self.mocap_thread.start()
+		# begin motion capture feedback
+		self.mocap_thread.start()
 
 		# center the mav on the image
 		self.center_thread.start()
