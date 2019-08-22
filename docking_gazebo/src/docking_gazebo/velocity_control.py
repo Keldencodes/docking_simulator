@@ -8,28 +8,25 @@ import rospy
 import time
 from sensor_msgs.msg import Image
 
-class in_flight_docking(Common):
+class velocity_control(Common):
 
 	def __init__(self):
-		super(in_flight_docking, self).__init__()
+		super(velocity_control, self).__init__()
 
-		# ros subscribers
+		# ros subscriber
 		self.image_sub = rospy.Subscriber(
-			'/carrier/camera/image_raw', Image, self.detect_led)
+			'/base/camera1/image_raw', Image, self.detect_led)
 
 
 	def docking_procedure(self):
 		# delay arming
 		time.sleep(5)
 
-		# set the altitude [m] of the docker 
-		self.alt = 8.0     
-
-		# arm the mav collect the orientation at takeoff
+		# arm the mav and collect the orientation at takeoff
 		self.set_arm(True)
 		self.takeoff_ori = self.current_pose[3:]
 
-		# send takeoff setpoint
+		# send initial setpoint
 		self.position_setpoint(0, 0, self.alt, self.takeoff_ori[0], self.takeoff_ori[1], 
 			self.takeoff_ori[2], self.takeoff_ori[3])
 
@@ -53,10 +50,10 @@ class in_flight_docking(Common):
 
 def main():
 	# initialize ros node 
-	rospy.init_node('in_flight_docking')
+	rospy.init_node('velocity_control')
 
 	# begin the docking procedure 
-	in_flight_docking().docking_procedure()
+	velocity_control().docking_procedure()
 
 if __name__ == '__main__':
 	main()

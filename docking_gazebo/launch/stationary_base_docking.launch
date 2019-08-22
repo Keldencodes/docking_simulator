@@ -1,21 +1,11 @@
 <?xml version="1.0"?>
 <launch>
-
     <!-- MAVROS posix SITL environment launch script -->
     <!-- launches MAVROS, PX4 SITL, Gazebo environment, and spawns vehicle -->
-    <!-- vehicle pose -->
-    <arg name="x" default="1.0"/>
-    <arg name="y" default="2.0"/>
-    <arg name="z" default="0"/>
-    <arg name="R" default="0"/>
-    <arg name="P" default="0"/>
-    <arg name="Y" default="1.8326"/>
     <!-- vehicle model and world -->
-    <arg name="est" default="lpe"/>
-    <arg name="vehicle" default="docker"/>
-    <arg name="ID" default="1"/>
-    <arg name="rcS" default="$(find docking_description)/params/$(arg vehicle)"/>
+    <arg name="est" default="ekf2"/>
     <arg name="world" default="$(find mavlink_sitl_gazebo)/worlds/empty.world"/>
+
     <!-- gazebo configs -->
     <env name="GAZEBO_MODEL_PATH" value="$(find docking_description)"/>
     <arg name="gui" default="true"/>
@@ -40,43 +30,32 @@
             command="$(find xacro)/xacro --inorder
                     '$(arg model)'
                     namespace:=$(arg model_name)" />
-        <node name="spawn_$(arg model_name)" pkg="gazebo_ros" type="spawn_model" respawn="false"    output="screen" args="-param robot_description -urdf -model $(arg model_name) -Y $(arg Y)" />
+        <node name="$(arg model_name)_spawn" pkg="gazebo_ros" type="spawn_model" respawn="false"    output="screen" args="-param robot_description -urdf -model $(arg model_name)" />
     </group>
 
     <group ns="docker">
-        <!-- PX4 configs -->
-        <arg name="interactive" default="true"/>
-        <!-- PX4 SITL -->
-        <!-- PX4 SITL -->
-        <arg unless="$(arg interactive)" name="px4_command_arg1" value=""/>
-        <arg     if="$(arg interactive)" name="px4_command_arg1" value="-d"/>
-        <node name="sitl_$(arg ID)" pkg="px4" type="px4" output="screen" args="$(find px4) $(arg rcS) $(arg px4_command_arg1)">
-        </node>
-        <!-- Gazebo model -->
-        <arg name="model_name" default="docker"/>
-        <arg name="model" default="$(find docking_description)/urdf/$(arg vehicle)_main.xacro"/>
-        <arg name="rotors_description_dir" default="$(find docking_description)"/>
-        <!-- send the robot XML to param server -->
-        <param name="rotors_description" command="
-        $(find xacro)/xacro $(arg model)
-        rotors_description_dir:=$(arg rotors_description_dir) --inorder"
-        />
-        <!-- Spawn model -->
-        <node name="$(arg vehicle)_spawn" output="screen" pkg="gazebo_ros" type="spawn_model" args="-urdf -param rotors_description -model $(arg vehicle)_$(arg ID) -package_to_model -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg R) -P $(arg P) -Y $(arg Y)"/>
-
-        <!-- MAVROS configs -->
-        <arg name="fcu_url" default="udp://:14540@localhost:14557"/>
-        <arg name="respawn_mavros" default="false"/>
+        <!-- MAVROS and vehicle configs -->
+        <arg name="ID" default="0"/>
+        <arg name="fcu_url" default="udp://:14540@localhost:14580"/>
+        <arg name="vehicle" default="solo"/>
+        <include file="$(find docking_gazebo)/launch/docker.launch">
+            <arg name="x" value="1.0"/>
+            <arg name="y" value="2.0"/>
+            <arg name="z" value="0"/>
+            <arg name="R" value="0"/>
+            <arg name="P" value="0"/>
+            <arg name="Y" value="0"/>
+            <arg name="vehicle" value="$(arg vehicle)"/>
+            <arg name="mavlink_udp_port" value="14560"/>
+            <arg name="mavlink_tcp_port" value="4560"/>
+            <arg name="ID" value="$(arg ID)"/>
+        </include>
         <!-- MAVROS -->
         <include file="$(find mavros)/launch/px4.launch">
             <!-- GCS link is provided by SITL -->
             <arg name="gcs_url" value=""/>
             <arg name="fcu_url" value="$(arg fcu_url)"/>
-            <arg name="respawn_mavros" value="$(arg respawn_mavros)"/>
         </include>
     </group>
-
-    <!-- Control Node -->
-    <!-- <node name="donut_docking" pkg="docking_gazebo" type="stationary_docking" output="screen" /> -->
 
 </launch>

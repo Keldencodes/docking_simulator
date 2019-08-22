@@ -40,8 +40,8 @@ class stationary_docking(Common):
 		# begin filtering vision data
 		self.filter_thread.start()
 
-		# begin motion capture feedback
-		self.mocap_thread.start()
+		# # begin vision feedback
+		# self.vision_thread.start()
 
 		# center the mav on the image
 		self.center_thread.start()
@@ -49,6 +49,9 @@ class stationary_docking(Common):
 		# dock
 		self.dock_init_thread.start()
 		self.dock_final_thread.start()
+
+		# collect led data
+		self.collect_thread.start()
 		
 
 def main():

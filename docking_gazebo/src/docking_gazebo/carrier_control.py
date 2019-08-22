@@ -208,6 +208,7 @@ class carrier_control(Common):
 		while not rospy.is_shutdown():
 			# check if it is time for landing depending if the docker has finished docking
 			if self.carrier_land_bool:
+				time.sleep(10)
 				self.carrier_setpoint(self.gps_docker.latitude, self.gps_docker.longitude,
 					self.initial_setpoint.altitude - 10.0)
 				time.sleep(15)

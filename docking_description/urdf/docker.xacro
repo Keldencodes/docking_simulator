@@ -113,7 +113,7 @@
     rotor_drag_coefficient="${rotor_drag_coefficient}"
     rolling_moment_coefficient="${rolling_moment_coefficient}"
     mesh="propeller"
-    color="Green">
+    color="White">
     <origin xyz="-${arm_length*0.707} ${arm_length*0.707} ${rotor_offset_top}" rpy="0 0 0" />
     <xacro:insert_block name="rotor_inertia" />
   </xacro:vertical_rotor>
@@ -153,7 +153,7 @@
     rotor_drag_coefficient="${rotor_drag_coefficient}"
     rolling_moment_coefficient="${rolling_moment_coefficient}"
     mesh="propeller"
-    color="Green">
+    color="White">
     <origin xyz="-${arm_length*0.707} -${arm_length*0.707} ${rotor_offset_top}" rpy="0 0 0" />
     <xacro:insert_block name="rotor_inertia" />
   </xacro:vertical_rotor>

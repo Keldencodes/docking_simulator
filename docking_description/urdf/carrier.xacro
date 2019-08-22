@@ -3,7 +3,7 @@
 <robot name="carrier" xmlns:xacro="http://ros.org/wiki/xacro">
   <!-- Properties -->
   <xacro:property name="namespace" value="carrier" />
-  <xacro:property name="rotor_velocity_slowdown_sim" value="10" />
+  <xacro:property name="rotor_velocity_slowdown_sim" value="20" />
   <xacro:property name="mesh_file" value="model://meshes/carrier.dae"/>
   <xacro:property name="use_collision_mesh" value="false"/>
   <xacro:property name="use_friction" value="true"/>
@@ -29,7 +29,7 @@
 
   <!-- Property Blocks -->
   <xacro:property name="body_inertia">
-    <inertia ixx="0.011" ixy="0.0" ixz="0.0" iyy="0.015" iyz="0.0" izz="0.021" /> <!-- [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] -->
+    <inertia ixx="0.201" ixy="0.0" ixz="0.0" iyy="0.205" iyz="0.0" izz="0.40" /> <!-- [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] [kg.m^2] -->
   </xacro:property>
 
   <!-- inertia of a single rotor, assuming it is a cuboid. Height=3mm, width=15mm -->
