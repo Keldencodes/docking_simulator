@@ -40,18 +40,12 @@ class stationary_docking(Common):
 		# begin filtering vision data
 		self.filter_thread.start()
 
-		# # begin vision feedback
-		# self.vision_thread.start()
+		# start vision feedback
+		self.vision_thread.start()
 
-		# center the mav on the image
-		self.center_thread.start()
-
-		# dock
-		self.dock_init_thread.start()
-		self.dock_final_thread.start()
-
-		# collect led data
-		self.collect_thread.start()
+		# begin publishing velocity commands for docking
+		self.vel_dock_thread.start()
+		self.vel_pub_thread.start()
 		
 
 def main():
