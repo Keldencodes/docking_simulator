@@ -11,7 +11,6 @@ from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 from queue import Queue
 import time
-import tf
 
 class Common(object):
 
@@ -26,9 +25,9 @@ class Common(object):
 		# set fixed values
 		self.ros_rate = 40            # Hz
 		self.alt = 5.0				  # m
+		self.yaw_offset = 0.0         # deg
 		self.dead_dia_irl = 0.1778	  # m
 		self.shift_time = 0.0		  # s
-		self.filter_time = 0.0        # s
 		self.last_lost = 0.0 		  # s
 		self.dead_switch = 0
 		self.takeoff = True
@@ -50,8 +49,9 @@ class Common(object):
 
 		self.rolling_init = 0
 		self.rolling_cv = np.zeros([2, 3])
+		self.reject_time = 0
 		self.collect_ind = 0
-		self.collect_size = 200
+		self.collect_size = 2000
 		self.raw_txt = np.empty([self.collect_size, 3])
 		self.filter_txt = np.empty([self.collect_size, 3])
 		self.setpoint_txt = np.empty([self.collect_size, 3])
@@ -146,7 +146,7 @@ class Common(object):
 		self.pos.pose.orientation.w = desired_pose[6]
 
 
-	def position_reached(self, offset=2.0):
+	def position_reached(self, offset=1.0):
 		"""
 		Checks if a position setpoint is reached
 
@@ -168,14 +168,14 @@ class Common(object):
 				self.set_desired_pose(desired_pose)
 				self.takeoff = False
 			elif off_check and not reached:
+				time.sleep(8)
+				self.reached_event.set()
 				# if there is another desired position, take it out of the queue
 				if not self.pos_desired_q.empty():
 					desired_pose = self.pos_desired_q.get()
 					# set the desired pose
 					self.set_desired_pose(desired_pose)
 
-				time.sleep(10)
-				self.reached_event.set()
 			elif not off_check and not self.docking_event.is_set():
 				self.reached_event.clear()
 			elif reached and not self.pos_desired_q.empty():
@@ -286,7 +286,6 @@ class Common(object):
 		"""
 		if self.led_event.wait():
 			Timer(1.0, self.kalman_filter).start()
-			self.filter_time = time.time()
 
 
 	def led_to_cv(self, img, led_data):
@@ -403,20 +402,20 @@ class Common(object):
 			else:
 				self.rolling_cv[0, cols] = self.rolling_cv[1, cols]
 				current_time = time.time()
-				if self.filter_event.is_set() and current_time - self.filter_time > 3:	
-					if not self.rej_outlier(self.rolling_cv[0, cols], cv_raw, 0.2, 0.4):
-						self.rolling_cv[1, cols] = cv_raw
-				else:
+				if not self.rej_outlier(self.rolling_cv[0, cols], cv_raw, 0.2, 0.4):
 					self.rolling_cv[1, cols] = cv_raw
-				self.cv_pose_raw = self.rolling_cv[1, cols]		
+					self.reject_time = time.time()
+				else:
+					if current_time - self.reject_time > 1:
+						self.rolling_init = 0
+				self.cv_pose_raw = self.rolling_cv[1, cols]	
 
 			if self.filter_event.is_set():
 				# transform the cv pose from the camera frame to the local frame
-				yaw_offset = tf.transformations.euler_from_quaternion(self.takeoff_ori)[2]
-				self.cv_pose[0] = (np.cos(yaw_offset)*self.cv_pose_notf[0] -
-					np.sin(yaw_offset)*self.cv_pose_notf[1])
-				self.cv_pose[1] = (np.sin(yaw_offset)*self.cv_pose_notf[0] +
-					np.cos(yaw_offset)*self.cv_pose_notf[1])
+				self.cv_pose[0] = (np.cos(self.yaw_offset)*self.cv_pose_notf[0] -
+					np.sin(self.yaw_offset)*self.cv_pose_notf[1])
+				self.cv_pose[1] = (np.sin(self.yaw_offset)*self.cv_pose_notf[0] +
+					np.cos(self.yaw_offset)*self.cv_pose_notf[1])
 				self.cv_pose[2] = self.cv_pose_notf[2]
 
 				# display LED detection on image with a cricle and center point
@@ -633,7 +632,6 @@ class Common(object):
 				z_ref = self.alt - self.cam_alt - self.cv_pose[2]
 				self.vel.twist.linear.x = -self.cv_pose[0]/ref_dia * vel_ref
 				self.vel.twist.linear.y = -self.cv_pose[1]/ref_dia * vel_ref
-				# self.vel.twist.linear.z = z_ref/ref_dia * vel_ref
 
 				# calculate the offset of the mav from the center of the image
 				off_center = 2*np.sqrt(self.cv_pose[0]**2 + 
@@ -646,6 +644,8 @@ class Common(object):
 					self.vel.twist.linear.z = 0.5
 					time.sleep(6)
 				elif self.cv_pose[2] < self.alt_thresh and not off_center:
+					self.vel.twist.linear.x = 0.0
+					self.vel.twist.linear.y = 0.0
 					self.final_event.set()
 					time.sleep(self.descent_time)
 					# signal the carreir to land
@@ -654,5 +654,6 @@ class Common(object):
 					self.set_arm(False)
 				else:
 					self.vel.twist.linear.z = -self.descent_rate
+					# self.vel.twist.linear.z = z_ref/ref_dia * vel_ref
 			
 				rate.sleep()

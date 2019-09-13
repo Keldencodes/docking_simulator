@@ -7,6 +7,7 @@ from threading import Timer
 import rospy
 import time
 from sensor_msgs.msg import Image
+import tf
 
 class stationary_docking(Common):
 
@@ -25,6 +26,7 @@ class stationary_docking(Common):
 		# arm the mav and collect the orientation at takeoff
 		self.set_arm(True)
 		self.takeoff_ori = self.current_pose[3:]
+		self.yaw_offset = tf.transformations.euler_from_quaternion(self.takeoff_ori)[2]
 
 		# send initial setpoint
 		self.position_setpoint(0, 0, self.alt, self.takeoff_ori[0], self.takeoff_ori[1], 
@@ -37,7 +39,7 @@ class stationary_docking(Common):
 		# delay switch to offboard mode to ensure sufficient initial setpoint stream
 		Timer(5.0, self.set_offboard).start()
 
-		# begin filtering vision data
+		# begin filtering/collecting vision data
 		self.filter_thread.start()
 
 		# start vision feedback

@@ -26,7 +26,7 @@
   <xacro:arg name='enable_mavlink_interface' default='true' />
   <xacro:arg name='enable_wind' default='false' />
   <!-- The following causes segfault with multiple vehicles if defaults to true!!! -->
-  <xacro:arg name='enable_logging' default='false' />
+  <xacro:arg name='enable_logging' default='true' />
 
   <!-- macros for gazebo plugins, sensors -->
   <xacro:include filename="$(find docking_description)/urdf/component_snippets.xacro" />
