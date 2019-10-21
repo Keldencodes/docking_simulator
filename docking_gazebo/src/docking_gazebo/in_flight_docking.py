@@ -23,7 +23,10 @@ class in_flight_docking(Common):
 		time.sleep(5)
 
 		# set the altitude [m] of the docker 
-		self.alt = 8.0     
+		self.alt = 8.0 
+
+		# set higher docking delay
+		self.dock_delay = 10    
 
 		# arm the mav collect the orientation at takeoff
 		self.set_arm(True)

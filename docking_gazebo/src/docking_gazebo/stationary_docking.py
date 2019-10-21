@@ -42,8 +42,8 @@ class stationary_docking(Common):
 		# begin filtering/collecting vision data
 		self.filter_thread.start()
 
-		# start vision feedback
-		self.vision_thread.start()
+		# # start vision feedback
+		# self.vision_thread.start()
 
 		# begin publishing velocity commands for docking
 		self.vel_dock_thread.start()

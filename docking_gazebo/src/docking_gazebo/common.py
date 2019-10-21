@@ -34,8 +34,10 @@ class Common(object):
 		self.led_dia_irl = 0.2413
 		self.cam_alt = 0.683514
 		self.alt_thresh = 0.3
+		self.dock_delay = 5
 		self.descent_rate = 0.2
-		self.descent_time = (self.alt_thresh + self.cam_alt)/self.descent_rate
+		self.dock_duration = self.cam_alt/self.descent_rate
+		self.time_to_dock = self.alt_thresh/self.descent_rate
 
 		# initialize empty arrays, will observe errors is nans are not overwritten
 		self.cv_shift = np.array([np.nan, np.nan, np.nan])
@@ -86,10 +88,7 @@ class Common(object):
 		self.pos_reached_thread = Thread(target=self.position_reached)
 		self.filter_thread = Thread(target=self.call_filter)
 		self.collect_thread = Thread(target=self.collect_led_data)
-		self.center_thread = Thread(target=self.center_mav) 
 		self.vision_thread = Thread(target=self.vision_feedback)
-		self.dock_init_thread = Thread(target=self.dock_initial)
-		self.dock_final_thread = Thread(target=self.dock_final)
 		self.vel_pub_thread = Thread(target=self.velocity_pub)
 		self.vel_dock_thread = Thread(target=self.dock_velocity)
 
@@ -168,7 +167,7 @@ class Common(object):
 				self.set_desired_pose(desired_pose)
 				self.takeoff = False
 			elif off_check and not reached:
-				time.sleep(8)
+				time.sleep(15)
 				self.reached_event.set()
 				# if there is another desired position, take it out of the queue
 				if not self.pos_desired_q.empty():
@@ -412,14 +411,14 @@ class Common(object):
 
 			if self.filter_event.is_set():
 				# transform the cv pose from the camera frame to the local frame
-				self.cv_pose[0] = (np.cos(self.yaw_offset)*self.cv_pose_notf[0] -
-					np.sin(self.yaw_offset)*self.cv_pose_notf[1])
-				self.cv_pose[1] = (np.sin(self.yaw_offset)*self.cv_pose_notf[0] +
-					np.cos(self.yaw_offset)*self.cv_pose_notf[1])
-				self.cv_pose[2] = self.cv_pose_notf[2]
+				self.cv_pose[0] = (np.cos(self.yaw_offset)*self.cv_pose_raw[0] -
+					np.sin(self.yaw_offset)*self.cv_pose_raw[1])
+				self.cv_pose[1] = (np.sin(self.yaw_offset)*self.cv_pose_raw[0] +
+					np.cos(self.yaw_offset)*self.cv_pose_raw[1])
+				self.cv_pose[2] = self.cv_pose_raw[2]
 
 				# display LED detection on image with a cricle and center point
-				led_filtered = self.cv_to_led(img, self.cv_pose_notf)
+				led_filtered = self.cv_to_led(img, self.cv_pose_raw)
 				img = cv2.circle(img, (np.uint16(led_filtered[0]),
 					np.uint16(led_filtered[1])), 
 					np.uint16(led_filtered[2])/2, (0,255,0), 2)
@@ -482,7 +481,7 @@ class Common(object):
 		# wait for mav to reach takeoff altitude and for kalman filtering to begin
 		if self.reached_event.wait() and self.filter_event.wait():
 			# allow time for filter to stablize
-			time.sleep(5)
+			time.sleep(self.dock_delay)
 
 			# initialize origin of cv coordinate frame in the local frame
 			init_pose = self.current_pose[:3] - self.cv_pose
@@ -504,113 +503,6 @@ class Common(object):
 				rate.sleep()
 
 
-	def center_mav(self):
-		"""
-		Centers the mav over the camera once vision feedback has been initialized
-		then sets the docking_event flag to begin docking
-
-		Runs in the center_thread
-		"""
-		# wait for vision to be initialized
-		#if self.vision_event.wait():
-		if self.reached_event.wait() and self.filter_event.wait():
-			# cv_shift is the pose correction of the mav to center it over the camera
-			self.cv_shift = self.current_pose[:3] - self.cv_pose
-			# set new centered position
-			self.position_setpoint(self.cv_shift[0], self.cv_shift[1], 
-				self.alt + self.carrier_pose[2], self.takeoff_ori[0], 
-				self.takeoff_ori[1], self.takeoff_ori[2], self.takeoff_ori[3])
-
-			# delay docking event to ensure reached event is cleared
-			time.sleep(2)
-			self.docking_event.set()
-
-
-	def dock_initial(self):
-		"""
-		Once the mav is centered, this function is called to begin the descent of the
-		mav as well as keep it centered on the image within the limits of a 'dead zone'.
-		If it falls outside of the 'dead zone' a centering correction command is sent.
-
-		Runs in the dock_init_thread 
-		"""
-		if self.docking_event.wait():
-			rate = rospy.Rate(self.ros_rate)
-			while not rospy.is_shutdown() and not self.final_event.is_set():
-				# wait for centering to be finished
-				if self.reached_event.is_set():
-					# time to be compared to time at which a centering correction is made
-					current_time = time.time()
-					# calculate the offset of the mav from the center of the image
-					off_center = 2*np.sqrt(self.cv_pose[0]**2 + self.cv_pose[1]**2)
-					# if it is outside of the dead zone and has not corrected itself
-					if off_center > self.dead_dia_irl and self.dead_switch == 0:
-						self.cv_shift = self.cv_shift - self.cv_pose
-						self.dead_switch = 1
-						# time of centering correction
-						self.shift_time = time.time()
-					# if it is within the dead zone
-					elif off_center <= self.dead_dia_irl:
-						self.dead_switch = 0
-					# if it tried correcting but has been outside the dead zone for 2s
-					elif self.dead_switch == 1 and current_time - self.shift_time > 2:
-						self.dead_switch = 0
-
-					# set the desired positions	
-					desired_pose = np.array([self.cv_shift[0], self.cv_shift[1], 0.0,
-						self.takeoff_ori[0], self.takeoff_ori[1], 
-						self.takeoff_ori[2], self.takeoff_ori[3]])
-					self.set_desired_pose(desired_pose)
-
-				rate.sleep()
-
-
-	def dock_final(self):
-		"""
-		Once the mav is alt_thresh m above the camera, if it is within the dead zone it
-		will continue docking and disarm, if it is not within the dead zone it will reset
-		itself by going to the starting altitude and repeating the initial docking 
-		procedure. If at any point during the initial docking procedure the camera
-		looses led detection it will reset itself.
-
-		Runs in the dock_final_thread
-		"""
-		if self.docking_event.wait():
-			rate = rospy.Rate(self.ros_rate)
-			while not rospy.is_shutdown() and not self.final_event.is_set():
-				# make sure it waits when a position setpoint is given
-				if self.reached_event.is_set():
-					# if at any point the led is not detected
-					if self.cv_pose[2] >= self.alt_thresh and self.lost_event.is_set():
-						self.position_setpoint(self.cv_shift[0], 
-							self.cv_shift[1], self.alt + self.carrier_pose[2], 
-							self.takeoff_ori[0], self.takeoff_ori[1], 
-							self.takeoff_ori[2], self.takeoff_ori[3])
-						time.sleep(2)
-						# reset dead switch
-						self.dead_switch = 0
-					# if the mav is 0.4 m above the camera and is not in the dead zone
-					elif self.cv_pose[2] < self.alt_thresh and self.dead_switch == 1:
-						self.position_setpoint(self.cv_shift[0], 
-							self.cv_shift[1], self.alt + self.carrier_pose[2], 
-							self.takeoff_ori[0], self.takeoff_ori[1], 
-							self.takeoff_ori[2], self.takeoff_ori[3])
-						time.sleep(2)
-						# reset the dead switch
-						self.dead_switch = 0
-					# if the mav is 0.4 m above the camera and within the dead zone
-					elif self.cv_pose[2] < self.alt_thresh and self.dead_switch == 0:
-						self.final_event.set()
-						descent_time
-						time.sleep(2)
-						# signal the carreir to land
-						self.carrier_land_pub.publish(True)
-						# disarm the docker
-						self.set_arm(False)
-
-				rate.sleep()
-
-
 	def velocity_pub(self):
 		if self.stop_pos_event.wait():
 			rate = rospy.Rate(self.ros_rate)
@@ -626,8 +518,9 @@ class Common(object):
 		# if self.reached_event.wait() and self.filter_event.wait():
 			self.stop_pos_event.set()
 			rate = rospy.Rate(self.ros_rate)
-			vel_ref = 0.2 
+			vel_ref = 0.1  
 			ref_dia = 0.05
+			reached = False
 			while not rospy.is_shutdown() and not self.final_event.is_set():
 				z_ref = self.alt - self.cam_alt - self.cv_pose[2]
 				self.vel.twist.linear.x = -self.cv_pose[0]/ref_dia * vel_ref
@@ -637,6 +530,9 @@ class Common(object):
 				off_center = 2*np.sqrt(self.cv_pose[0]**2 + 
 					self.cv_pose[1]**2) > self.dead_dia_irl
 				current_time = time.time()
+				# if self.cv_pose[2] <= self.alt_thresh and not reached:
+				# 	self.vel.twist.linear.z = 0.0
+				# 	reached = True
 				if self.cv_pose[2] >= self.alt_thresh and self.lost_event.is_set():
 					self.vel.twist.linear.z = 0.5
 					time.sleep(6)
@@ -644,15 +540,16 @@ class Common(object):
 					self.vel.twist.linear.z = 0.5
 					time.sleep(6)
 				elif self.cv_pose[2] < self.alt_thresh and not off_center:
+					self.final_event.set()
+					time.sleep(self.time_to_dock)
 					self.vel.twist.linear.x = 0.0
 					self.vel.twist.linear.y = 0.0
-					self.final_event.set()
-					time.sleep(self.descent_time)
+					time.sleep(self.dock_duration)
 					# signal the carreir to land
 					self.carrier_land_pub.publish(True)
 					# disarm the docker
 					self.set_arm(False)
-				else:
+				else: # elif self.cv_pose[2] > self.alt_thresh and not reached:
 					self.vel.twist.linear.z = -self.descent_rate
 					# self.vel.twist.linear.z = z_ref/ref_dia * vel_ref
 			

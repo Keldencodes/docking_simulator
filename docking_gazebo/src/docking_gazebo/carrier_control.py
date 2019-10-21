@@ -145,7 +145,7 @@ class carrier_control(Common):
 				self.set_carrier_gps(desired_pose)
 				self.carrier_takeoff = False
 			elif carrier_off_check and not carrier_reached:
-				time.sleep(8)
+				time.sleep(5)
 				self.carrier_reached_event.set()
 				# if there is another desired position, take it out of the queue
 				if not self.carrier_desired_q.empty():
