@@ -41,6 +41,7 @@ class stationary_docking(Common):
 
 		# begin filtering/collecting vision data
 		self.filter_thread.start()
+		self.collect_thread.start()
 
 		# # start vision feedback
 		# self.vision_thread.start()

@@ -24,7 +24,7 @@ class Common(object):
 
 		# set fixed values
 		self.ros_rate = 40            # Hz
-		self.alt = 5.0				  # m
+		self.alt = 3.0				  # m
 		self.yaw_offset = 0.0         # deg
 		self.dead_dia_irl = 0.1778	  # m
 		self.shift_time = 0.0		  # s
@@ -47,15 +47,18 @@ class Common(object):
 		self.cv_pose_raw = np.array([np.nan, np.nan, np.nan])
 		self.cv_pose = np.array([np.nan, np.nan, np.nan])
 		self.cv_pose_notf = np.array([np.nan, np.nan, np.nan])
+		self.cv_vel_raw = np.zeros(3)
+		self.cv_vel = np.zeros(3)
 		self.carrier_pose = np.zeros(3)
 
 		self.rolling_init = 0
 		self.rolling_cv = np.zeros([2, 3])
+		self.rolling_time = np.zeros(2)
 		self.reject_time = 0
 		self.collect_ind = 0
-		self.collect_size = 2000
+		self.collect_size = 1200
 		self.raw_txt = np.empty([self.collect_size, 3])
-		self.filter_txt = np.empty([self.collect_size, 3])
+		self.transform_txt = np.empty([self.collect_size, 3])
 		self.setpoint_txt = np.empty([self.collect_size, 3])
 
 		# ros publishers
@@ -391,21 +394,30 @@ class Common(object):
 			led_raw = np.array([(outer_cx + inner_cx)/2, (outer_cy + inner_cy)/2, 
 				(outer_dia + inner_dia)/2])
 
+			# convert the data from pixel notation to real world distances
 			cv_raw = self.led_to_cv(img, led_raw)
 
+			# reject any large jumps in detection
 			cols = [0, 1, 2]
 			if self.rolling_init < 2:
 				self.rolling_cv[self.rolling_init, cols] = cv_raw
+				self.rolling_time[self.rolling_init] = time.time()
 				self.cv_pose_raw = cv_raw
 				self.rolling_init += 1
 			else:
 				self.rolling_cv[0, cols] = self.rolling_cv[1, cols]
+				self.rolling_time[0] = self.rolling_time[1]
 				current_time = time.time()
+				# doesn't travel fast enough to go 0.2m in x,y and 0.4m in z in 1 timestep
 				if not self.rej_outlier(self.rolling_cv[0, cols], cv_raw, 0.2, 0.4):
 					self.rolling_cv[1, cols] = cv_raw
+					self.rolling_time[1] = time.time()
+					self.cv_vel_raw = np.subtract(self.rolling_cv[1, cols],
+						self.rolling_cv[0, cols])/np.subtract(self.rolling_time[1],
+						self.rolling_time[0])
 					self.reject_time = time.time()
 				else:
-					if current_time - self.reject_time > 1:
+					if current_time - self.reject_time > 0.2:
 						self.rolling_init = 0
 				self.cv_pose_raw = self.rolling_cv[1, cols]	
 
@@ -416,6 +428,13 @@ class Common(object):
 				self.cv_pose[1] = (np.sin(self.yaw_offset)*self.cv_pose_raw[0] +
 					np.cos(self.yaw_offset)*self.cv_pose_raw[1])
 				self.cv_pose[2] = self.cv_pose_raw[2]
+
+				# transform the cv velocity from the camera frame to the local frame
+				self.cv_vel[0] = (np.cos(self.yaw_offset)*self.cv_vel_raw[0] -
+					np.sin(self.yaw_offset)*self.cv_vel_raw[1])
+				self.cv_vel[1] = (np.sin(self.yaw_offset)*self.cv_vel_raw[0] +
+					np.cos(self.yaw_offset)*self.cv_vel_raw[1])
+				self.cv_vel[2] = self.cv_vel_raw[2]
 
 				# display LED detection on image with a cricle and center point
 				led_filtered = self.cv_to_led(img, self.cv_pose_raw)
@@ -445,9 +464,9 @@ class Common(object):
 					rows = [self.collect_ind, self.collect_ind, self.collect_ind]
 					self.raw_txt[rows, cols] = \
 						np.array([cv_raw[0], cv_raw[1], cv_raw[2]])
-					self.filter_txt[rows, cols] = \
-						np.array([self.cv_pose_notf[0], self.cv_pose_notf[1], 
-						self.cv_pose_notf[2]])
+					self.transform_txt[rows, cols] = \
+						np.array([self.cv_pose[0], self.cv_pose[1], 
+						self.cv_pose[2]])
 					self.setpoint_txt[rows, cols] = \
 						np.array([self.vel.twist.linear.x, 
 						self.vel.twist.linear.y, self.vel.twist.linear.z])	
@@ -460,15 +479,15 @@ class Common(object):
 		if self.collect_event.wait():
 			print("FILTER DATA COLLECTED")
 			direc = "/home/ryrocha/catkin_ws/src/docking_simulator/docking_gazebo/plots/"
+			# np.savetxt(direc + 
+			# 	'sim_raw_{}.csv'.format(time.strftime("%d-%b-%H:%M")), 
+			# 	self.raw_txt, delimiter=',')
 			np.savetxt(direc + 
-				'sim_raw_{}.csv'.format(time.strftime("%d-%b-%H:%M")), 
-				self.raw_txt, delimiter=',')
-			np.savetxt(direc + 
-				'sim_filtered_{}.csv'.format(time.strftime("%d-%b-%H:%M")), 
-				self.filter_txt, delimiter=',')
-			np.savetxt(direc + 
-				'sim_setpoint_{}.csv'.format(time.strftime("%d-%b-%H:%M")), 
-				self.setpoint_txt, delimiter=',')
+				'sim_transform_{}.csv'.format(time.strftime("%d-%b-%H:%M")), 
+				self.transform_txt, delimiter=',')
+			# np.savetxt(direc + 
+			# 	'sim_setpoint_{}.csv'.format(time.strftime("%d-%b-%H:%M")), 
+			# 	self.setpoint_txt, delimiter=',')
 
 
 	def vision_feedback(self):
@@ -514,16 +533,17 @@ class Common(object):
 
 
 	def dock_velocity(self):
-		if self.vision_event.wait():
-		# if self.reached_event.wait() and self.filter_event.wait():
+		# if self.vision_event.wait():
+		if self.reached_event.wait() and self.filter_event.wait():
 			self.stop_pos_event.set()
 			rate = rospy.Rate(self.ros_rate)
-			vel_ref = 0.1  
-			ref_dia = 0.05
+			vel_ref = 0.2  
+			ref_dia = 0.02
 			reached = False
+			hit_center = False
 			while not rospy.is_shutdown() and not self.final_event.is_set():
 				z_ref = self.alt - self.cam_alt - self.cv_pose[2]
-				self.vel.twist.linear.x = -self.cv_pose[0]/ref_dia * vel_ref
+				self.vel.twist.linear.x = -self.cv_pose[0]/ref_dia * vel_ref 
 				self.vel.twist.linear.y = -self.cv_pose[1]/ref_dia * vel_ref
 
 				# calculate the offset of the mav from the center of the image
@@ -550,7 +570,14 @@ class Common(object):
 					# disarm the docker
 					self.set_arm(False)
 				else: # elif self.cv_pose[2] > self.alt_thresh and not reached:
-					self.vel.twist.linear.z = -self.descent_rate
+					self.vel.twist.linear.z = 0.0
 					# self.vel.twist.linear.z = z_ref/ref_dia * vel_ref
+					if not off_center:
+						hit_center = True
+
+					if hit_center:
+						# update velocity based on what is observed by cv
+						self.vel.twist.linear.x = -self.cv_pose[0]/ref_dia * vel_ref - self.cv_vel[0] 
+						self.vel.twist.linear.y = -self.cv_pose[1]/ref_dia * vel_ref - self.cv_vel[1]
 			
 				rate.sleep()
