@@ -211,7 +211,7 @@ class carrier_control(Common):
 				time.sleep(10)
 				self.carrier_setpoint(self.gps_docker.latitude, self.gps_docker.longitude,
 					self.initial_setpoint.altitude - 10.0)
-				time.sleep(15)
+				time.sleep(12)
 				# disarm the carrier
 				self.carrier_arm(False)
 

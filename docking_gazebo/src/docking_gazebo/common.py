@@ -24,7 +24,7 @@ class Common(object):
 
 		# set fixed values
 		self.ros_rate = 40            # Hz
-		self.alt = 3.0				  # m
+		self.alt = 5.0				  # m
 		self.yaw_offset = 0.0         # deg
 		self.dead_dia_irl = 0.1778	  # m
 		self.shift_time = 0.0		  # s
@@ -34,7 +34,7 @@ class Common(object):
 		self.led_dia_irl = 0.2413
 		self.cam_alt = 0.683514
 		self.alt_thresh = 0.3
-		self.dock_delay = 5
+		self.dock_delay = 2
 		self.descent_rate = 0.2
 		self.dock_duration = self.cam_alt/self.descent_rate
 		self.time_to_dock = self.alt_thresh/self.descent_rate
@@ -417,7 +417,7 @@ class Common(object):
 						self.rolling_time[0])
 					self.reject_time = time.time()
 				else:
-					if current_time - self.reject_time > 0.2:
+					if current_time - self.reject_time > 0.1:
 						self.rolling_init = 0
 				self.cv_pose_raw = self.rolling_cv[1, cols]	
 
@@ -535,10 +535,12 @@ class Common(object):
 	def dock_velocity(self):
 		# if self.vision_event.wait():
 		if self.reached_event.wait() and self.filter_event.wait():
+			time.sleep(self.dock_delay)
+
 			self.stop_pos_event.set()
 			rate = rospy.Rate(self.ros_rate)
-			vel_ref = 0.2  
-			ref_dia = 0.02
+			vel_ref = 0.10  
+			ref_dia = 0.03
 			reached = False
 			hit_center = False
 			while not rospy.is_shutdown() and not self.final_event.is_set():
@@ -570,7 +572,7 @@ class Common(object):
 					# disarm the docker
 					self.set_arm(False)
 				else: # elif self.cv_pose[2] > self.alt_thresh and not reached:
-					self.vel.twist.linear.z = 0.0
+					self.vel.twist.linear.z = -0.2
 					# self.vel.twist.linear.z = z_ref/ref_dia * vel_ref
 					if not off_center:
 						hit_center = True

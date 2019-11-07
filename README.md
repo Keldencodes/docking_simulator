@@ -5,7 +5,29 @@ Autonomous In-flight Multi-rotor Docking Simulator
 
 This is a Gazebo simulation to demonstrate an approach to autonomous in-flight docking of unmanned multi-rotor aerial vehicles (MAV). The results of the simulation can be seen [here](https://youtu.be/rB6hydBpABs).
 
-The robotic system consists of two MAVs. The docking MAV is responsible for performing the docking maneuver while the carrier MAV receives the docking MAV. The docking MAV disarms once docking is complete while the carrier MAV stays powered. The carrier MAV is much larger than the docking MAV and approaches it from below. This iteration uses a quadrotor for the docking MAV and a hexarotor for the carrier MAV. The flight control software used on the MAVs is [PX4](https://github.com/PX4/Firmware). The MAVs are autonomously controlled using ROS with Python. ROS communicates to PX4 through the [MAVROS](https://github.com/mavlink/mavros) package.  
+**Simulation Dependencies:**
 
-A vision and docking system is mounted on the carrier MAV. The docking system consists of a vertical mast attached to the top of the carrier MAV. At the top of the mast, pointed along the z-direction of the carrier MAV, is a monocular camera used by the vision system. The frame of the docking MAV is ring-shaped to receive the mast. The underside of the frame of the docking MAV has a red strip to represent what would be LED fiducial markers. The vision algorithms used for detection and tracking of the docking MAV were programmed using OpenCV with Python.
+- Ubuntu 16.04
+- ROS Kinetic
+- Gazebo 7
+- Python 2.7
+- OpenCV 3
+- PX4 Firmware
+- RotorS
 
+A proper installation of Ubuntu 16.04 will include Python 2.7. Note that the algorithms used in this simulation require the NumPy library as well. This [link](https://www.learnopencv.com/install-opencv3-on-ubuntu/) is useful for properly installing OpenCV 3. The installation procedure for RotorS can be followed [here](https://github.com/ethz-asl/rotors_simulator). The procedures [here](https://dev.px4.io/v1.8.2/en/setup/dev_env_linux.html) should be followed for installing PX4/ROS Kinetic/Gazebo and building the PX4 Firmware's SITL environment.
+
+**Running the Simulation**
+1. Clone the repository: `git clone https://github.com/ryrocha/docking_simulator.git`
+2. Build the simulator packages:
+```
+cd ~/catkin_ws
+catkin build docking_description
+catkin build docking_gazebo
+```
+3. Launch the simulation: 
+- For the stationary docking simulation: `roslaunch docking_gazebo stationary_base_docking.launch` 
+- For the in-flight docking simulation: `roslaunch docking_gazebo in_flight_docking.launch` 
+4. Start the ROS nodes used to control the drones:
+- For the stationary docking simulation: `rosrun docking_gazebo stationary_docking`
+- For the in-flight docking simulation: In one terminal window `rosrun docking_gazebo in_flight_docking` followed by `rosrun docking_gazebo carrier_control` in another
