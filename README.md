@@ -3,7 +3,7 @@ Autonomous In-flight Multi-rotor Docking Simulator
 
 ![](sim_img.jpg)
 
-This is a Gazebo simulation to demonstrate an approach to autonomous in-flight docking of unmanned multi-rotor aerial vehicles (MAV). The results of the simulation can be seen [here](https://youtu.be/rB6hydBpABs).
+This is a Gazebo simulation to demonstrate an approach to autonomous in-flight docking of unmanned multi-rotor aerial vehicles (MAV). The results of the simulation can be seen [here](https://www.youtube.com/watch?v=vvjtEGQ-iVU).
 
 **Simulation Dependencies:**
 
