@@ -17,7 +17,7 @@ This is a Gazebo simulation to demonstrate an approach to autonomous in-flight d
 
 A proper installation of Ubuntu 16.04 will include Python 2.7. Note that the algorithms used in this simulation require the NumPy library as well. This [link](https://www.learnopencv.com/install-opencv3-on-ubuntu/) is useful for properly installing OpenCV 3. The installation procedure for RotorS can be followed [here](https://github.com/ethz-asl/rotors_simulator). The procedures [here](https://dev.px4.io/v1.8.2/en/setup/dev_env_linux.html) should be followed for installing PX4/ROS Kinetic/Gazebo and building the PX4 Firmware's SITL environment.
 
-**Running the Simulation**
+**Running the Simulation:**
 1. Clone the repository: `git clone https://github.com/ryrocha/docking_simulator.git`
 2. Build the simulator packages:
 ```
