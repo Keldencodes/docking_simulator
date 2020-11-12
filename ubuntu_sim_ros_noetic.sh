@@ -1,11 +1,11 @@
 #!/bin/bash
 
-## Bash script for setting up ROS Noetic (with Gazebo 9) development environment for PX4 on Ubuntu LTS (18.04).
+## Bash script for setting up ROS Noetic (with Gazebo 9) development environment for PX4 on Ubuntu LTS (20.04).
 ## It installs the common dependencies for all targets (including Qt Creator)
 ##
 ## Installs:
 ## - Common dependencies libraries and tools as defined in `ubuntu_sim_common_deps.sh`
-## - ROS Melodic (including Gazebo9)
+## - ROS Noetic (including Gazebo11)
 ## - MAVROS
 
 if [[ $(lsb_release -sc) == *"xenial"* ]]; then
