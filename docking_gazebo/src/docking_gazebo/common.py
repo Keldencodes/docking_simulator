@@ -230,7 +230,7 @@ class Common(object):
 		"""
 		if self.state.mode != "OFFBOARD":
 			self.set_mode_client_docker(base_mode=0, custom_mode="OFFBOARD")
-			rospy.loginfo("Docker mode: %s" % "OFFBOARD")	
+			rospy.loginfo("Docker mode: OFFBOARD")	
 
 
 	def rej_outlier(self, previous, current, xy_offset, z_offset):
@@ -353,8 +353,8 @@ class Common(object):
 		red_hue_image = cv2.GaussianBlur(red_hue_image, (9, 9), 2, 2)
 
 		# detect contours
-		_, contours, _ = cv2.findContours(
-			red_hue_image,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+		contours, _ = cv2.findContours(
+			red_hue_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
 		# if two contours are not detected
 		if len(contours) < 2:

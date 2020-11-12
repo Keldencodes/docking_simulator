@@ -1,8 +1,8 @@
-#!usr/bin/env python2
+#!usr/bin/env python3
 
 import roslib
 roslib.load_manifest('docking_gazebo')
-from common import Common
+from .common import Common
 from threading import Thread, Event
 import rospy
 import time

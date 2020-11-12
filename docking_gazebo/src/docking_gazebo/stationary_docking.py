@@ -1,8 +1,8 @@
-#!usr/bin/env python2
+#!usr/bin/env python3
 
 import roslib
 roslib.load_manifest('docking_gazebo')
-from common import Common
+from .common import Common
 from threading import Timer
 import rospy
 import time
@@ -35,16 +35,16 @@ class stationary_docking(Common):
 		# start threads to publish positions and check that positions are being reached
 		self.pos_reached_thread.start()
 		self.pos_pub_thread.start()
-
+		
 		# delay switch to offboard mode to ensure sufficient initial setpoint stream
 		Timer(5.0, self.set_offboard).start()
 
 		# begin filtering/collecting vision data
 		self.filter_thread.start()
-		# self.collect_thread.start()
+		self.collect_thread.start()
 
-		# # start vision feedback
-		# self.vision_thread.start()
+		# start vision feedback
+		self.vision_thread.start()
 
 		# begin publishing velocity commands for docking
 		self.vel_dock_thread.start()
