@@ -75,7 +75,7 @@ wstool update -t src
 if ! rosdep install --from-paths src --ignore-src -y; then
     # (Use echo to trim leading/trailing whitespaces from the unsupported OS name
     unsupported_os=$(echo $(rosdep db 2>&1| grep Unsupported | awk -F: '{print $2}'))
-    rosdep install --from-paths src --ignore-src --rosdistro noetic -y --os ubuntu:bionic
+    rosdep install --from-paths src --ignore-src --rosdistro noetic -y --os ubuntu:focal
 fi
 
 if [[ ! -z $unsupported_os ]]; then
