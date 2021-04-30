@@ -1,0 +1,63 @@
+#VRML_SIM R2021a utf8
+WorldInfo {
+  info [
+    "Simple DJI mavic 2 simulation controlled by a ROS node written in Python."
+  ]
+  title "ROS Python with DJI mavic"
+  basicTimeStep 8
+  defaultDamping Damping {
+    linear 0.5
+    angular 0.5
+  }
+  coordinateSystem "NUE"
+  contactProperties [
+    ContactProperties {
+      material2 "mavic2pro body"
+      coulombFriction [
+        0.7
+      ]
+    }
+  ]
+}
+Viewpoint {
+  orientation 0.07050665473376751 -0.9955409361549733 -0.06266622757062013 4.81348648259329
+  position 3.097238269380304 0.6132726075362769 0.5611797778962901
+  near 0.2
+  follow "Docker" # "Mavic 2 PRO"
+  followSmoothness 0.2
+}
+TexturedBackground {
+  luminosity 3
+}
+TexturedBackgroundLight {
+}
+Floor {
+  size 200 200
+  tileSize 3 3
+  appearance Grass {
+    colorOverride    1 1 1
+    type             "mossy"
+    textureTransform NULL
+    IBLStrength      1
+  }
+}
+# Mavic2Pro {
+#   translation 0 0.1 0
+#   rotation 0 -0.7071067811865475 -0.7071067811865475 -3.14159
+#   #controller "ros"
+#   # controller "mavic2pro"
+#   cameraSlot [
+#     Camera {
+#       width 400
+#       height 240
+#       near 0.2
+#     }
+#   ]
+# }
+Docker {
+  translation 0 0.005 0
+  rotation 0 -0.7071067811865475 -0.7071067811865475 -3.14159
+  controller "mavic2pro"
+}
+
+
